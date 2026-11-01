@@ -1,0 +1,79 @@
+# Old/archived files
+old/
+
+# Local development artifacts, scratch folders and test outputs.
+# Real recordings, evidence, exports and their logs must never be committed.
+dev-artifacts/
+/_*
+
+# Recordings and exports
+*.mp4
+*.m4v
+*.mkv
+*.avi
+*.mov
+*.wmv
+*.mpg
+*.mpeg
+*.ts
+*.mts
+*.m2ts
+*.webm
+*.dav
+*.264
+*.h264
+*.265
+*.h265
+/*.png
+/*.jpg
+
+# Optional local sample recordings used by some tests (not distributed)
+/gas-station.mp4
+/short-clip.mp4
+
+# OSVEV export and working-copy sidecar logs
+*.osvev.json
+*.frames.jsonl
+*.conversion.jsonl
+*.mp4.txt
+*.mkv.txt
+*.png.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
