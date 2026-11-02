@@ -149,10 +149,11 @@ License as published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version. See [LICENSE](LICENSE).
 
 The packaged executable also includes FFmpeg (GPL v3 build), PyQt6 (GPL v3),
-Qt (LGPL v3), OpenCV, NumPy, Python and other components. The **About**
-dialog and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) list their
-licenses and corresponding-source obligations. Some distribution requirements
-remain open; they are listed in that file's "Distribution status" section.
+Qt (LGPL v3 main modules and GPL v3 Multimedia), OpenCV, NumPy, Python and other
+components. The **About** dialog and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) list their licenses and exact
+dependency source/build directions. Final release assembly and validation steps
+are listed in that file's "Distribution status" section.
 
 ## Quick Start
 
