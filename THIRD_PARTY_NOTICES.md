@@ -78,10 +78,26 @@ metadata's SPDX expressions.
 | libiconv | 1.18 | LGPL-2.1-only | Character conversion |
 | cairo | 1.18.6 | LGPL-2.1-only OR MPL-1.1 | 2D graphics for librsvg/Pango |
 | Graphite2 | 1.3.15 | LGPL-2.0-or-later (also MPL/GPL options) | Font shaping |
-| FreeType | 2.14.3 | FTL OR GPL-2.0-only | Fonts |
+| FreeType | 2.14.3 | FTL OR GPL-2.0-only; used under the FTL (see Acknowledgements) | Fonts |
 | HarfBuzz, Fontconfig, libxml2, libexpat, libffi, Brotli, libdeflate, pixman, lcms2 | conda-forge (see table of contents) | MIT | Support libraries |
 | zlib, zlib-ng, libpng, bzip2, xz, zstd, libjpeg-turbo, libtiff, OpenJPEG, Lerc | conda-forge | Zlib, libpng, bzip2, 0BSD/public domain, BSD-3-Clause, IJG AND BSD-3-Clause AND Zlib, HPND, BSD-2-Clause, Apache-2.0 | Compression and image formats |
 | Microsoft Visual C++ 2015-2022 runtime, Universal CRT | 14.51, 10.0.26100 | Microsoft redistributable licenses | Windows runtime DLLs; redistribution as permitted by Microsoft's terms |
+
+### Acknowledgements
+
+Some permissive licenses require a statement in the documentation that
+accompanies a binary:
+
+- This software is based in part on the work of the FreeType Team
+  (<https://www.freetype.org>). FreeType is dual-licensed; OSVEV uses it under the
+  [FreeType License](https://freetype.org/license.html), not its GPL-2.0-only
+  alternative, which cannot be combined into a GPLv3 distribution.
+- This software is based in part on the work of the Independent JPEG Group
+  (libjpeg-turbo, `jpeg8.dll`).
+
+The inspected 0.1.0 build collected no license texts for the FreeType
+(`libfreetype`, `libfreetype6`) or SQLite (`libsqlite`) conda packages, so the
+FreeType License is linked above. SQLite is in the public domain.
 
 ## Corresponding source and relinking
 
@@ -241,6 +257,8 @@ Already implemented:
 - Build-time collection of dependency license texts, as described above.
 - Exact source/build directions for the 18 conda GPL/LGPL package records above
   and the separate OpenCV FFmpeg DLL.
+- The attribution statements that the FreeType and libjpeg-turbo licenses
+  require for binary distribution.
 
 Before distributing a new executable:
 
