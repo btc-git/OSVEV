@@ -23,9 +23,9 @@ The build collects available conda-forge package license texts under
 licenses, including OpenCV's `LICENSE-3RD-PARTY.txt`. Collection depends on the
 license files being present in the build environment/cache; inspect the actual
 release bundle rather than assuming collection proves completeness.
-A release archive should also ship this file,
-`LICENSE` and that `third_party_licenses` folder next to the executable.
 These come from conda's `info/licenses` folders and the wheels' `*.dist-info`.
+They, `LICENSE` and this file are embedded in the executable; see
+**Release distribution** below.
 
 ## Bundled components (OSVEV 0.1.0 build)
 
@@ -248,32 +248,35 @@ patent rights. OpenH264 here is built from source, so Cisco's patent-covered
 binary license does not apply. Distributors and users are responsible for
 determining whether a patent license is required for their use.
 
-## Distribution status (release assembly pending)
+## Release distribution
 
-Already implemented:
+OSVEV is published as a single `OSVEV.exe` on the
+[Releases](https://github.com/btc-git/osvev/releases) page, marked as a
+pre-release while it is in beta. The release notes carry the executable's
+SHA-256, a link to the source tag, and a reminder that the executable is
+unsigned, so Windows SmartScreen may warn.
 
-- OSVEV's GPL license, copyright, source link and third-party notices.
-- About tabs for those documents and exact build/runtime identification.
-- Build-time collection of dependency license texts, as described above.
-- Exact source/build directions for the 18 conda GPL/LGPL package records above
-  and the separate OpenCV FFmpeg DLL.
-- The attribution statements that the FreeType and libjpeg-turbo licenses
-  require for binary distribution.
+- **License and notices.** `LICENSE` and this file are embedded in the
+  executable, and **About** shows them. They are also in the repository at the
+  release tag.
+- **Dependency license texts.** The collected `third_party_licenses` folder is
+  embedded in the executable, not offered as a separate download. PyInstaller's
+  `pyi-archive_viewer` can list and extract it. The inspected build supplied none
+  for FreeType or SQLite; see Acknowledgements above.
+- **Source.** The release tag identifies the exact OSVEV commit. The tables above
+  give exact source and build material for the GPL/LGPL dependencies.
 
-Before distributing a new executable:
+When publishing a new executable:
 
-- Make the matching OSVEV source revision and build scripts available, including
-  new modules; do not identify a modified development tree as an exact clean commit.
-- Confirm the final build still uses the package set documented above, and make
-  these source/build directions available alongside the binary. Preserve the
-  applicable source-access and replacement/relinking rights; this document is
-  not a compliance certification.
-- Include `LICENSE`, this file and the collected `third_party_licenses` in the
-  release package. The external release archive layout has not yet been produced.
+- Build from a clean, committed and public revision, and tag that revision. Do
+  not identify a modified development tree as an exact clean commit (**About >
+  Build details** shows `+dirty` for uncommitted changes).
+- Confirm the build still uses the package set documented above and update the
+  tables when it changes. Preserve the applicable source-access and
+  replacement/relinking rights; this document is not a compliance
+  certification.
+- Keep the source directions above working, and link this file from the release
+  notes.
 - Consider the separate patent questions above; no patent review has been done.
-
-Release validation, separate from license notices:
-
-- Test the packaged executable on clean Windows without a development environment.
-- Identify the release and its SHA-256. The executable is currently unsigned;
-  disclose that fact and possible Windows SmartScreen warnings.
+- Test the packaged executable on clean Windows without a development
+  environment before publishing.

@@ -152,8 +152,8 @@ The packaged executable also includes FFmpeg (GPL v3 build), PyQt6 (GPL v3),
 Qt (LGPL v3 main modules and GPL v3 Multimedia), OpenCV, NumPy, Python and other
 components. The **About** dialog and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) list their licenses and exact
-dependency source/build directions. Final release assembly and validation steps
-are listed in that file's "Distribution status" section.
+dependency source/build directions. Release contents and publishing notes are in
+that file's "Release distribution" section.
 
 ## Quick Start
 
