@@ -10,7 +10,7 @@ decoding, enhancement and export algorithms are unchanged; export commands for t
 same original frames are byte-identical. Tests: `tests/test_range_import.py`
 (full-scan slice equality incl. mid-GOP, VFR, file start/end; exact PTS seeking with
 native-sample equality; plan/command equality; verified PNG/FFV1/H.264 exports; app
-navigation and export dialog numbering). Details in [README.md](README.md).
+navigation and export dialog numbering). Details in [README.md](../../README.md).
 
 ## Command-driven export follow-up
 
@@ -55,7 +55,7 @@ Direct API requests to reproduce JPEG processing are still rejected.
 No previews, caches or mandatory working copies from the abandoned
 architecture have been restored.
 
-See [Export and reproducibility](EXPORTING.md). Earlier feature inventories
+See [Export and reproducibility](../EXPORTING.md). Earlier feature inventories
 below remain historical assessments, not the current export capability.
 
 ## Playback scheduling follow-up
@@ -242,7 +242,7 @@ The current shared contract retains the validated per-BGR-channel contrast
 LUT but replaces brightness/sharpening with explicit libavfilter definitions.
 Its order is brightness, contrast, sharpening, then optional JPEG teaching
 simulation. The source conversion, native sample retention, magnification
-and inspector are unchanged. See [Export and reproducibility](EXPORTING.md)
+and inspector are unchanged. See [Export and reproducibility](../EXPORTING.md)
 for precise matrix/range, kernel and rounding definitions.
 
 It is reasonable to publish a clearly labeled *analogous* FFmpeg command

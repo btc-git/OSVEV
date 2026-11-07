@@ -84,7 +84,7 @@ The monolithic `osvev.py` file (1750 lines) has been refactored into modular com
 - JPEG, audio, highlights, Magnified View, Additional Zoom and overlays excluded
 - Export does not require a preview cache or working copy. Optional timeline
   previews and compatible working-copy conversion are separate from this pipeline.
-- See [Export and reproducibility](EXPORTING.md) for auditing and supported scope
+- See [Export and reproducibility](../EXPORTING.md) for auditing and supported scope
 
 ## Key Improvements
 
