@@ -251,8 +251,8 @@ determining whether a patent license is required for their use.
 ## Release distribution
 
 OSVEV is published as a single `OSVEV.exe` on the
-[Releases](https://github.com/btc-git/osvev/releases) page, marked as a
-pre-release while it is in beta. The release notes carry the executable's
+[Releases](https://github.com/btc-git/osvev/releases) page. The release notes
+carry the executable's
 SHA-256, a link to the source tag, and a reminder that the executable is
 unsigned, so Windows SmartScreen may warn.
 

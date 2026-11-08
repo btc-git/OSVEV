@@ -59,7 +59,7 @@ Color, timing and recovered-count permissions do not waive this safeguard.
 Rotation tags and display matrices (including zero-angle flip/shear matrices)
 are rejected, not silently ignored or applied. Color-managed monitor reproduction
 is not implemented. No runtime-version-independent hash guarantee is claimed.
-The existing packaged executable has **not** been rebuilt or certified.
+Packaged executables are not independently certified.
 
 Verified full-video input also accepts progressive 8-bit packed RGB-family
 FFV1 (`bgr0`, `rgb0`, `bgr24`, `rgb24`), including OSVEV's own BGR0/MKV exports.

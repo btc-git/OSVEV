@@ -7,13 +7,13 @@ This application was developed with AI assistance and has undergone human review
 
 OSVEV is a tool for visualizing the effects of different video adjustment filters and enhancements.
 
-⚠️ **Early beta / development preview. Use it as an inspection and teaching aid; verify all findings independently.** See [Important Disclaimers](#important-disclaimers).
+⚠️ **OSVEV is in active development. Use it as an inspection and teaching aid; verify all findings independently.** See [Important Disclaimers](#important-disclaimers).
 
 ## Download
 
-Prerelease Windows builds, when available, are published on the
-[Releases](https://github.com/btc-git/osvev/releases) page with a SHA-256
-checksum. Compare the checksum before running the executable. `OSVEV.exe` is
+Download the latest `OSVEV.exe` for Windows from the
+[Releases](https://github.com/btc-git/osvev/releases/latest) page. Each release
+lists a SHA-256 checksum. Compare the checksum before running the executable. `OSVEV.exe` is
 not code-signed, so Windows SmartScreen may warn the first time it runs
 (**More info** -> **Run anyway**). No Python, conda or FFmpeg installation is
 needed for the packaged executable.
@@ -46,7 +46,7 @@ needed for the packaged executable.
 
 ## Quick Start
 
-1. Download `OSVEV.exe` from [Releases](https://github.com/btc-git/osvev/releases)
+1. Download `OSVEV.exe` from [Releases](https://github.com/btc-git/osvev/releases/latest)
    and compare its SHA-256 checksum (see [Download](#download)).
 2. Run `OSVEV.exe`, click **Open**, select a video, then choose **Entire Video**
    (default) or **Selected Time Range** for part of a long video.
