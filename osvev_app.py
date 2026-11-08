@@ -174,12 +174,35 @@ class TimeRangeDialog(QDialog):
         return (True, dialog.time_range) if dialog.exec() else (False, None)
 
 
+DISCLAIMERS_HTML = """
+<p><b>In active development and testing. Not a validated forensic tool;
+verify all findings independently.</b></p>
+<ul>
+<li>OSVEV is an inspection and teaching aid and may contain errors.</li>
+<li>The Main View, Magnified View, interpolation, highlights and JPEG simulation
+are visual aids. Only verified exports carry OSVEV's documented verification
+claims, and only within their stated limits.</li>
+<li>FFprobe Info and the file row report header values from the file; they are
+not verified against decoded frames.</li>
+<li>Work from a copy of original recordings and preserve the original with its
+hash.</li>
+<li>OSVEV does not replace professional forensic video analysis, validated
+laboratory procedures or expert review.</li>
+<li>OSVEV was developed with AI assistance and has undergone human review and
+testing. The program itself does not use AI.</li>
+</ul>
+<p>Full disclaimers and documentation:
+<a href="{url}#readme" style="color: #0057b8;">README</a> &middot;
+<a href="{url}/tree/main/docs" style="color: #0057b8;">docs</a></p>
+"""
+
+
 class AboutDialog(QDialog):
     """Version, copyright, license and bundled third-party notices."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        from PyQt6.QtWidgets import QPlainTextEdit, QTabWidget
+        from PyQt6.QtWidgets import QPlainTextEdit, QTabWidget, QTextBrowser
         import PyQt6.QtCore as qt_core
         self.setWindowTitle(f"About {APP_NAME}")
         self.resize(820, 620)
@@ -221,6 +244,10 @@ class AboutDialog(QDialog):
         header.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         layout.addWidget(header)
         tabs = QTabWidget()
+        disclaimers = QTextBrowser()
+        disclaimers.setOpenExternalLinks(True)
+        disclaimers.setHtml(DISCLAIMERS_HTML.format(url=SOURCE_URL))
+        tabs.addTab(disclaimers, "Disclaimers")
         for title, name in (("License (GPL-3.0)", "LICENSE"),
                             ("Third-party notices", "THIRD_PARTY_NOTICES.md")):
             text = QPlainTextEdit()

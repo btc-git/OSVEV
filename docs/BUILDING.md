@@ -2,7 +2,7 @@
 
 Most users only need the packaged `OSVEV.exe`; see the [README](../README.md).
 
-OSVEV 2.0.0 needs GPL-enabled FFmpeg libraries, because the shared
+OSVEV 2.0.1 needs GPL-enabled FFmpeg libraries, because the shared
 brightness/contrast filter is FFmpeg `eq`. The ordinary PyPI PyAV wheel
 does not include it. The supported development environment is the conda
 environment defined by [environment-eq.yml](../environment-eq.yml):
@@ -149,6 +149,15 @@ absent from the repository root.
 Playback regressions additionally cover fractional deadlines, irregular
 timestamps, speed changes, stalls, loop timing, paint deduplication,
 bounded diagnostics, and sequential fast-forward input fidelity.
+
+## Troubleshooting
+
+1. Run `python check_dependencies.py` or `.\launch-eq.ps1 -CheckOnly` in the `osvev` environment.
+2. `Reproducible enhancement processing failed: no filter eq` means a non-GPL
+   PyAV was used, for example a pip/PyPI PyAV environment or an old build. Use the `osvev`
+   environment or a build from it.
+3. **About** shows which FFmpeg executable is in use; the packaged executable
+   reports a path inside its temporary `_MEI...` extraction directory.
 
 ## Technical notes
 

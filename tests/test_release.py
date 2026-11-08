@@ -104,6 +104,15 @@ class AboutTests(unittest.TestCase):
                        if tabs.tabText(i) == "Build details")
         self.assertIn("synthetic probe failure", details)
 
+    def test_about_shows_disclaimers_first(self):
+        dialog = self.dialog()
+        tabs = dialog.findChild(QTabWidget)
+        self.assertEqual(tabs.tabText(0), "Disclaimers")
+        text = tabs.widget(0).toPlainText()
+        self.assertIn("Not a validated forensic tool", text)
+        self.assertIn("developed with AI assistance", text)
+        self.assertIn("copy of original recordings", text)
+
 
 if __name__ == "__main__":
     unittest.main()

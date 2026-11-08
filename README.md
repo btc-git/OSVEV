@@ -7,7 +7,8 @@ This application was developed with AI assistance and has undergone human review
 
 OSVEV is a tool for visualizing the effects of different video adjustment filters and enhancements.
 
-⚠️ **OSVEV is in active development. Use it as an inspection and teaching aid; verify all findings independently.** See [Important Disclaimers](#important-disclaimers).
+⚠️ **In active development and testing. Not a validated forensic tool; verify all findings independently.**
+OSVEV is an inspection and teaching aid. See [Important Disclaimers](#important-disclaimers).
 
 ## Download
 
@@ -60,45 +61,18 @@ To run or build from source, see [Building from source](docs/BUILDING.md).
 
 ## Features
 
-- Frame-by-frame navigation
-- Variable playback speed
-- Advanced magnification with multiple interpolation methods:
-  - Nearest neighbor
-  - Bilinear
-  - Bicubic
-  - Lanczos
-- Image adjustments:
-  - Brightness and contrast via standard FFmpeg `eq` on explicit full-range
-    BT.709 YUV444 luma (`brightness=slider/100`, `contrast=1+slider/100`),
-    then conversion back to BGR; not the legacy OpenCV adjustment algorithm
-  - Sharpness adjustment (FFmpeg 5x5 luma unsharp)
-  - Exact top/bottom/left/right pixel crop, after enhancements, without output resizing
-  - **Rotate** (0° Original, 90° clockwise, 180°, 270° clockwise): exact 90-degree
-    pixel rotation after crop and before Zoom Level, without interpolation; applied
-    to the Main View, Magnified View, Pixel Inspector mapping and verified exports
-  - JPEG compression teaching simulation (after the core enhancements)
-- Detailed frame information panel
-- **File** row above Play Speed: the loaded file's name (hover for the full path;
-  click to show it selected in its folder), labeled **Codec**, **Resolution**,
-  **Avg FPS** and **Size** attributes, and an **FFprobe Info** button that opens a list of container
-  and stream header values (full path, container, brands, writing application,
-  codec profile/level, duration, bit rates, frame rates, color tags, audio streams), with Copy and
-  Show in Folder. These values are read once by FFprobe when the video is loaded;
-  they are reported header values and are not verified against decoded frames.
-  Resolution is before crop/rotation/zoom; average FPS is not playback speed or
-  a claim of constant frame rate. Unreported values are not guessed. Attributes
-  wrap when needed, and the dark-blue filename is shortened to fit.
-  After a working-copy conversion the row identifies the loaded working copy.
-- Pixel Inspector with two value rows plus Image Adjustments
-  - **Native Source YCbCr** (or **Native Source RGB** for native RGB sources):
-    decoded source samples at the crosshair's source pixel, unchanged by enhancements
-  - **Processed RGB**: the processed pixel under the Main View crosshair after
-    enhancements, crop, Zoom Level and the selected interpolation
-- **Inspection Aids (Preview Only)** control group: Highlight Original Pixels /
-  Highlight Interpolated Pixels (schematic, display-only) and JPEG Compression
-  Simulation; both are excluded from exports and working copies
-- Optional **Selected Time Range** in Open for long videos (PyAV decoder only; see
-  [Open Time Range](docs/TECHNICAL.md#open-time-range-partial-indexing))
+- Frame-by-frame, I-frame and timeline navigation with variable playback speed
+- Magnifier with nearest-neighbor, bilinear, bicubic and Lanczos interpolation
+- Brightness, contrast and sharpness (standard FFmpeg filters), exact crop,
+  90-degree rotation and zoom
+- Pixel Inspector showing native source and processed pixel values
+- File information row and FFprobe header details
+- Preview-only inspection aids: interpolated-pixel highlights and JPEG
+  compression simulation
+- Optional Selected Time Range for long videos
+- Verified PNG and FFV1/MKV exports, or lossy H.264/MP4, with processing logs
+
+See [Features and controls in detail](docs/TECHNICAL.md#features-and-controls-in-detail).
 
 ## Application Screenshot
 
@@ -108,35 +82,14 @@ To run or build from source, see [Building from source](docs/BUILDING.md).
 
 ## Controls
 
-- **Open**: Choose a video, then Entire Video (default) or Selected Time Range
-- **File** name (above Play Speed): Click to show the loaded file in its folder;
-  **FFprobe Info** shows its container and stream header information
-- **Reset**: Reset all adjustments to defaults
-- **Frame** arrows: Navigate frames manually (**Left / Right** keys). Holding a key keeps
-  stepping one frame at a time, waiting for each frame to display before the next step
-  (so slow 4K decodes never build a backlog), and stops on release, at the loaded
-  start/end, on any other key, or on a read error. A single press still wraps around.
-- **I-Frame** arrows: Pause and navigate to the nearest preceding/following frame
-  whose source `pict_type` is `I`, skipping the current frame. Keyframe flags are
-  not substituted for frame type. Navigation stays within the loaded video or
-  time range and does not wrap; unavailable frame types are reported explicitly.
-  Keyboard shortcuts: **Shift+Left / Shift+Right**.
-- **Play/Pause**: Toggle video playback (**Space**)
-- **Timeline**: Click to seek immediately. Drag the handle smoothly for live
-  previews from an independent decoder and processor, using the same verified
-  frame index and color interpretation. Previews target up to 8 FPS, adapt to
-  decoding/processing cost, and retain only the newest requested position.
-  In-flight previews may lag a continuously moving handle; newer completed
-  frames are never replaced by older results, and results from obsolete
-  sessions or processing settings are discarded. The selected frame updates
-  even while holding the mouse still. On release the normal decoder seeks accurately to
-  the final frame. Seeking leaves playback paused and audio silent. During
-  playback, the handle follows the displayed frame index without interpolation.
-  Slow sources may preview less frequently; the final seek and GUI rendering
-  retain their existing costs.
-- **Magnifier**: Drag the orange box to select an area to magnify
-- **Export**: Show/copy an ordinary FFmpeg command, execute with progress
-  and cancellation, or verify an externally produced output.
+- **Open**: choose a video, then Entire Video or Selected Time Range
+- **Left / Right**: step one frame; **Shift+Left / Shift+Right**: previous/next I-frame
+- **Space**: play/pause
+- **Timeline**: click or drag to seek
+- **Magnifier**: drag the orange box to choose the magnified area
+- **Reset**: restore default adjustments
+- **Export**: run, copy or verify the FFmpeg export command
+- **About**: version, disclaimers, licenses and build details
 
 ## Documentation
 
@@ -154,14 +107,12 @@ To run or build from source, see [Building from source](docs/BUILDING.md).
 
 ## Troubleshooting
 
-If you encounter issues:
-
-1. From source, run `python check_dependencies.py` or `.\launch-eq.ps1 -CheckOnly` in the `osvev` environment.
-2. `Reproducible enhancement processing failed: no filter eq` means a non-GPL
-   PyAV was used, for example a pip/PyPI PyAV environment or an old build. Use the `osvev`
-   environment or a build from it.
-3. **About** shows which FFmpeg executable is in use; the packaged executable
-   reports a path inside its temporary `_MEI...` extraction directory.
+- Check the export's processing log for errors and warnings.
+- **About** → **Build details** shows the version, source revision and FFmpeg
+  build; include these when reporting a problem.
+- Report problems on the [Issues](https://github.com/btc-git/OSVEV/issues) page.
+  Do not attach case recordings or logs containing confidential paths.
+- Running from source: see [Troubleshooting in Building from source](docs/BUILDING.md#troubleshooting).
 
 ## License
 
