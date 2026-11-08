@@ -27,11 +27,12 @@ These come from conda's `info/licenses` folders and the wheels' `*.dist-info`.
 They, `LICENSE` and this file are embedded in the executable; see
 **Release distribution** below.
 
-## Bundled components (OSVEV 0.1.0 build)
+## Bundled components (OSVEV 2.0.0 build)
 
 Versions are those of the `osvev` environment created from
 `environment-eq.yml` (conda-forge, Windows x64). They were verified against the
-PyInstaller table of contents of the 0.1.0 build. Licenses are the package
+PyInstaller table of contents of the 0.1.0 build; the 2.0.0 build uses the same
+unchanged environment. Licenses are the package
 metadata's SPDX expressions.
 
 ### Video processing

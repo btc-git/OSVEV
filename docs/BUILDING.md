@@ -2,7 +2,7 @@
 
 Most users only need the packaged `OSVEV.exe`; see the [README](../README.md).
 
-OSVEV 0.1.0 needs GPL-enabled FFmpeg libraries, because the shared
+OSVEV 2.0.0 needs GPL-enabled FFmpeg libraries, because the shared
 brightness/contrast filter is FFmpeg `eq`. The ordinary PyPI PyAV wheel
 does not include it. The supported development environment is the conda
 environment defined by [environment-eq.yml](../environment-eq.yml):
