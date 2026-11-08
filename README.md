@@ -100,6 +100,12 @@ To run or build from source, see [Building from source](docs/BUILDING.md).
 - Optional **Selected Time Range** in Open for long videos (PyAV decoder only; see
   [Open Time Range](docs/TECHNICAL.md#open-time-range-partial-indexing))
 
+## Application Screenshot
+
+<div align="center">
+  <img src="screenshot.png" alt="OSVEV application interface" width="700">
+</div>
+
 ## Controls
 
 - **Open**: Choose a video, then Entire Video (default) or Selected Time Range

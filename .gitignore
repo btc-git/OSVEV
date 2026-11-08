@@ -25,6 +25,7 @@ dev-artifacts/
 *.265
 *.h265
 /*.png
+!/screenshot.png
 /*.jpg
 
 # Optional local sample recordings used by some tests (not distributed)
