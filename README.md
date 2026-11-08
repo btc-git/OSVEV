@@ -46,7 +46,7 @@ OSVEV is an inspection and teaching aid. See [Important Disclaimers](#important-
 ## Quick Start
 
 1. Download and run `OSVEV.exe` (see [Download](#download)).
-2. Run `OSVEV.exe`, click **Open**, select a video, then choose **Entire Video**
+2. Click **Open**, select a video, then choose **Entire Video**
    (default) or **Selected Time Range** for part of a long video.
 3. Adjust brightness, contrast, sharpness, crop, rotation and zoom; use the
    magnifier and Pixel Inspector to examine pixels.
