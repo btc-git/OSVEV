@@ -11,7 +11,7 @@ __version__ = "0.1.0"
 APP_NAME = "OSVEV"
 COPYRIGHT = "Copyright \u00a9 2026 CrimLawTech LLC"
 LICENSE_NAME = "GNU General Public License v3.0 or later (GPL-3.0-or-later)"
-SOURCE_URL = "https://github.com/btc-git/osvev"
+SOURCE_URL = "https://github.com/btc-git/OSVEV"
 
 
 def resource_path(name: str) -> Path:

@@ -119,7 +119,7 @@ not the default substitute for source access on an online release.
 
 ### OSVEV source
 
-Use [OSVEV's repository](https://github.com/btc-git/osvev) at the exact commit
+Use [OSVEV's repository](https://github.com/btc-git/OSVEV) at the exact commit
 shown in **About > Build details** and in each processing log. The release tag
 must identify that source revision. It includes `environment-eq.yml`,
 `osvev.spec` and `build.ps1`, the scripts used to build the executable.
@@ -251,7 +251,7 @@ determining whether a patent license is required for their use.
 ## Release distribution
 
 OSVEV is published as a single `OSVEV.exe` on the
-[Releases](https://github.com/btc-git/osvev/releases) page. The release notes
+[Releases](https://github.com/btc-git/OSVEV/releases) page. The release notes
 carry the executable's
 SHA-256, a link to the source tag, and a reminder that the executable is
 unsigned, so Windows SmartScreen may warn.
