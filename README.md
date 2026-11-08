@@ -12,12 +12,10 @@ OSVEV is an inspection and teaching aid. See [Important Disclaimers](#important-
 
 ## Download
 
-Download the latest `OSVEV.exe` for Windows from the
-[Releases](https://github.com/btc-git/OSVEV/releases/latest) page. Each release
-lists a SHA-256 checksum. Compare the checksum before running the executable. `OSVEV.exe` is
-not code-signed, so Windows SmartScreen may warn the first time it runs
-(**More info** -> **Run anyway**). No Python, conda or FFmpeg installation is
-needed for the packaged executable.
+1. **[Download OSVEV.exe](https://github.com/btc-git/OSVEV/releases/latest/download/OSVEV.exe)**
+   (latest version for Windows; no installation needed).
+2. Double-click it to run. Windows may show "Windows protected your PC" because
+   the app is not code-signed: click **More info** → **Run anyway**.
 
 ## Privacy & Security
 
@@ -47,8 +45,7 @@ needed for the packaged executable.
 
 ## Quick Start
 
-1. Download `OSVEV.exe` from [Releases](https://github.com/btc-git/OSVEV/releases/latest)
-   and compare its SHA-256 checksum (see [Download](#download)).
+1. Download and run `OSVEV.exe` (see [Download](#download)).
 2. Run `OSVEV.exe`, click **Open**, select a video, then choose **Entire Video**
    (default) or **Selected Time Range** for part of a long video.
 3. Adjust brightness, contrast, sharpness, crop, rotation and zoom; use the
