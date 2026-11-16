@@ -33,9 +33,6 @@ class ExportDialog(QDialog):
         self.setWindowTitle("FFmpeg export and verification")
         self.resize(820, 590)
         layout = QVBoxLayout(self)
-        self.audio_note = QLabel("Audio is NOT included in exports.")
-        self.audio_note.setStyleSheet("color: #c00000; font-weight: bold;")
-        layout.addWidget(self.audio_note)
         form = QFormLayout()
         self.format_combo = QComboBox()
         self.format_combo.addItems(["PNG (lossless RGB)", "FFV1 MKV (lossless RGB)", "H.264 MP4 (lossy compatibility)"])
@@ -69,10 +66,14 @@ class ExportDialog(QDialog):
         form.addRow("Selection", self.selection_combo)
         form.addRow(self.range_label, self.range_widget)
         form.addRow("New output name", path_row)
+        self.audio_note = QLabel("Audio is not included in exports.")
+        self.audio_note.setStyleSheet("color: #c00000;")
+        form.addRow(self.audio_note)
         self.diagnostics_check = QCheckBox("Save per-frame hash results")
         self.diagnostics_check.setToolTip(
-            "Every export is verified either way. This also saves each frame's hashes and match "
-            "results (.json files) for re-checking later. See About \u2192 User guide for details.")
+            "Saves .json files listing the hash of each exported frame alongside the hash of the\n"
+            "same frame rebuilt using the FFmpeg command in the log, and whether they match.\n"
+            "See About > User guide for details.")
         form.addRow(self.diagnostics_check)
         layout.addLayout(form)
         self.command_text = QPlainTextEdit()

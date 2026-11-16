@@ -545,7 +545,7 @@ class RealAudioPlaybackTests(unittest.TestCase):
                     viewer.get_processing_params(), viewer.decoder_backend, viewer,
                 )
                 try:
-                    self.assertIn("NOT included in exports", dialog.audio_note.text())
+                    self.assertIn("not included in exports", dialog.audio_note.text())
                 finally:
                     dialog.deleteLater()
             finally:

@@ -871,6 +871,11 @@ class ExportTests(unittest.TestCase):
         self.assertFalse(dialog.diagnostics_check.isChecked())
         self.assertTrue(dialog.diagnostics_check.isEnabled())
         self.assertEqual("Save per-frame hash results", dialog.diagnostics_check.text())
+        tooltip_lines = dialog.diagnostics_check.toolTip().splitlines()
+        self.assertEqual(len(tooltip_lines), 3)
+        metrics = dialog.diagnostics_check.fontMetrics()
+        self.assertLess(max(metrics.horizontalAdvance(line) for line in tooltip_lines),
+                        metrics.horizontalAdvance(" ".join(tooltip_lines)) / 2)
         self.assertTrue(Path(str(self.root / "gui.png") + ".txt").exists())
         self.assertFalse(Path(str(self.root / "gui.png") + ".osvev.json").exists())
         self.assertEqual(dialog.progress_bar.value(), 100)
