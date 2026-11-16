@@ -56,7 +56,7 @@ PNG sequences list every image and its hash. Detailed JSON/JSONL diagnostic
 records are optional in the dialog. These include per-frame hashes, verification
 statistics, hash commands and library versions. Internal per-frame verification
 is unchanged. Existing files are not overwritten.
-**Keep extra verification details (optional)** is off by default. Leave it off
+**Save per-frame hash results** is off by default. Leave it off
 for the usual media-plus-readable-log output; enable it for a detailed audit or
 troubleshooting. The extra records are not needed to run the recorded export
 command, but they preserve more verification evidence. Reproduction still needs
@@ -433,13 +433,13 @@ checkbox to keep them. These include pixel-difference dictionaries, timing
 tolerances, independent decoded-frame hash commands, the hash domain and
 processing library versions.
 
-The dialog's **Keep extra verification details (optional)**
+The dialog's **Save per-frame hash results**
 checkbox is off by default. Enabling it additionally saves
 `<chosen-output>.osvev.json` and `<chosen-output>.frames.jsonl`, including
 failure/cancellation status when applicable. Programmatic callers can use
 `execute_export(..., detailed_diagnostics=True)`.
-The dialog explains that verification and the successful `.txt` processing log
-do not depend on this option. Extra records are useful for detailed audits and
+Its tooltip and the in-app User guide explain that verification and the successful
+`.txt` processing log do not depend on this option. Extra records are useful for detailed audits and
 troubleshooting, not a prerequisite for running the recorded reproduction command.
 Do not confuse them with a working copy's `.conversion.jsonl`, which should stay
 with that derivative to preserve its source interpretation and timing provenance.

@@ -547,7 +547,7 @@ class ExportTests(unittest.TestCase):
         dialog.path_edit.setText(str(self.root / "speed-gui.png"))
         self.assertEqual(dialog.plan.playback_speed, 1)
         self.assertNotIn("setts", powershell_command(dialog.plan.command()))
-        self.assertIn("PNG: no playback timing", dialog.status_label.text())
+        self.assertNotIn("expected duration", dialog.status_label.text())
 
     def test_all_other_offered_speeds_and_cropped_hash_commands(self):
         for kind, extension in (("ffv1", ".mkv"), ("h264", ".mp4")):
@@ -870,9 +870,7 @@ class ExportTests(unittest.TestCase):
         self.assertIn("VERIFIED lossless", dialog.status_label.text())
         self.assertFalse(dialog.diagnostics_check.isChecked())
         self.assertTrue(dialog.diagnostics_check.isEnabled())
-        self.assertIn("optional", dialog.diagnostics_check.text())
-        self.assertIn("every export", dialog.diagnostics_note.text())
-        self.assertIn("Troubleshooting", dialog.diagnostics_note.text())
+        self.assertEqual("Save per-frame hash results", dialog.diagnostics_check.text())
         self.assertTrue(Path(str(self.root / "gui.png") + ".txt").exists())
         self.assertFalse(Path(str(self.root / "gui.png") + ".osvev.json").exists())
         self.assertEqual(dialog.progress_bar.value(), 100)

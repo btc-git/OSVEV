@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
     QSpinBox, QVBoxLayout, QWidget,
 )
 
-from crop_utils import ROTATION_LABELS
 from export_runner import ExportWorker
 from ffmpeg_export import ExportError, build_export_plan, powershell_command
 
@@ -34,18 +33,9 @@ class ExportDialog(QDialog):
         self.setWindowTitle("FFmpeg export and verification")
         self.resize(820, 590)
         layout = QVBoxLayout(self)
-        label = QLabel(
-            "Original video -> combined brightness/contrast (eq) -> sharpening -> exact crop -> exact rotation -> export scaling.\n"
-            f"Viewer settings: {playback_speed:g}x playback, {zoom_level}x zoom, {interpolation} interpolation, "
-            f"{ROTATION_LABELS.get(self.settings.get('rotation', 0), self.settings.get('rotation'))} rotation.\n"
-            "PNG/FFV1 preserve processed RGB pixels; compatibility H.264 is LOSSY.\n"
-            "Export-only FFmpeg interpolation may differ from OpenCV/Qt display pixels; neither viewer changes.\n"
-            "Audio is for listening only and is NOT included in exports.\n"
-            "Video-only; all selected frames retained. JPEG compression simulation, pixel highlighting, Magnified View,\n"
-            "Additional Zoom and inspection overlays are excluded. PNGs have no playback timing."
-        )
-        label.setWordWrap(True)
-        layout.addWidget(label)
+        self.audio_note = QLabel("Audio is NOT included in exports.")
+        self.audio_note.setStyleSheet("color: #c00000; font-weight: bold;")
+        layout.addWidget(self.audio_note)
         form = QFormLayout()
         self.format_combo = QComboBox()
         self.format_combo.addItems(["PNG (lossless RGB)", "FFV1 MKV (lossless RGB)", "H.264 MP4 (lossy compatibility)"])
@@ -79,19 +69,11 @@ class ExportDialog(QDialog):
         form.addRow("Selection", self.selection_combo)
         form.addRow(self.range_label, self.range_widget)
         form.addRow("New output name", path_row)
-        self.diagnostics_check = QCheckBox("Keep extra verification details (optional)")
+        self.diagnostics_check = QCheckBox("Save per-frame hash results")
         self.diagnostics_check.setToolTip(
-            "Adds a .osvev.json summary and .frames.jsonl per-frame records. "
-            "Useful for detailed audits and diagnosing failures; verification is unchanged.")
+            "Every export is verified either way. This also saves each frame's hashes and match "
+            "results (.json files) for re-checking later. See About \u2192 User guide for details.")
         form.addRow(self.diagnostics_check)
-        self.diagnostics_note = QLabel(
-            "Verification runs for every export, with or without this option. Successful exports "
-            "always include a readable .txt processing log with settings, commands and file hashes.\n"
-            "Troubleshooting or detailed audits: extra JSON/JSONL files retain per-frame hashes, "
-            "timing checks and failure details."
-        )
-        self.diagnostics_note.setWordWrap(True)
-        form.addRow(self.diagnostics_note)
         layout.addLayout(form)
         self.command_text = QPlainTextEdit()
         self.command_text.setReadOnly(True)
@@ -161,10 +143,9 @@ class ExportDialog(QDialog):
             self.status_label.setText(
                 f"{self.plan.count} frames; "
                 + f"{self.plan.width}x{self.plan.height}; "
-                + ("PNG: no playback timing; " if self.plan.kind == "png" else
+                + ("" if self.plan.kind == "png" else
                    f"{self.plan.playback_speed:g}x; expected duration {float(self.plan.expected_duration):.6f} s; ")
-                + ("lossless processed RGB" if self.plan.lossless else "LOSSY H.264; pixel differences will be measured")
-                + ". Every frame is verified; successful exports receive one .txt processing log."
+                + ("lossless" if self.plan.lossless else "LOSSY H.264")
             )
         except (OSError, ValueError, RuntimeError) as error:
             self.command_text.clear()

@@ -513,7 +513,6 @@ class RealAudioPlaybackTests(unittest.TestCase):
 
     @requires_samples("gas-station.mp4")
     def test_existing_recording_with_enhancements_and_export_notice(self):
-        from PyQt6.QtWidgets import QLabel
         from export_dialog import ExportDialog
         with patch.object(OSVEV, "_check_dependencies"), \
                 patch.object(OSVEV, "set_windows_taskbar_icon"), \
@@ -546,8 +545,7 @@ class RealAudioPlaybackTests(unittest.TestCase):
                     viewer.get_processing_params(), viewer.decoder_backend, viewer,
                 )
                 try:
-                    self.assertTrue(any("NOT included in exports" in label.text()
-                                        for label in dialog.findChildren(QLabel)))
+                    self.assertIn("NOT included in exports", dialog.audio_note.text())
                 finally:
                     dialog.deleteLater()
             finally:
