@@ -92,6 +92,8 @@ class ExportPlan:
     preserve_source_pts: bool = False
     duplicate_groups: tuple = ()  # (original PTS, 1-based source frame numbers)
     count_discrepancy: dict | None = None
+    # Counter-clockwise degrees of the source display matrix, not copied to the output; None if absent.
+    source_display_rotation: int | None = None
     @property
     def count(self) -> int:
         return self.last - self.first + 1
@@ -272,6 +274,7 @@ def build_export_plan(source: str, destination: str, kind: str, first: int, last
         effective_color = capture.effective_color
         audit = capture.color_audit
         count_discrepancy = capture.count_discrepancy
+        display_rotation = capture.display_rotation if capture.has_display_matrix else None
     finally:
         capture.release()
     if not math.isfinite(fps) or fps <= 0:
@@ -351,6 +354,10 @@ def build_export_plan(source: str, destination: str, kind: str, first: int, last
         conversion = ",".join(f"{name}={options}"
                               for name, options in conversion_stages(effective_color))
     graph = f"trim=start_frame={first}:end_frame={last + 1},{timing_graph},{conversion}"
+    if display_rotation is not None:
+        # Otherwise FFmpeg copies the matrix into MKV/MP4 (and PNG EXIF), so players would
+        # rotate the output again; only the Rotate setting orients exported pixels.
+        graph = "sidedata=mode=delete:type=DISPLAYMATRIX," + graph
     graph += "," + enhancement_filter(
         settings["brightness"], settings["contrast"], settings["sharpness"]
     )
@@ -373,6 +380,7 @@ def build_export_plan(source: str, destination: str, kind: str, first: int, last
             len(metadata),
         ),
         color_choices, audit, preserve_source_pts, duplicate_groups, count_discrepancy,
+        display_rotation,
     )
     plan.check_destination(check_outputs=not allow_existing_output)
     return plan

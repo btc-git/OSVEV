@@ -2,7 +2,7 @@
 
 Most users only need the packaged `OSVEV.exe`; see the [README](../README.md).
 
-OSVEV 2.0.1 needs GPL-enabled FFmpeg libraries, because the shared
+OSVEV 2.0.2 needs GPL-enabled FFmpeg libraries, because the shared
 brightness/contrast filter is FFmpeg `eq`. The ordinary PyPI PyAV wheel
 does not include it. The supported development environment is the conda
 environment defined by [environment-eq.yml](../environment-eq.yml):
@@ -62,8 +62,9 @@ conda activate osvev
 pyinstaller osvev.spec
 ```
 
-The checked script does the same without activation. It writes each build to a
-new `dist\<timestamp-id>\OSVEV.exe` and never overwrites earlier builds:
+The checked script does the same without activation. It builds in
+`build\staging`, then replaces `dist\OSVEV.exe` and writes its SHA-256 to
+`dist\OSVEV.exe.sha256`. A failed build leaves the existing executable unchanged:
 
 ```powershell
 .\build.ps1

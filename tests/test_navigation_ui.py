@@ -7,12 +7,12 @@ from unittest.mock import Mock, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QShortcut
+from PyQt6.QtCore import QPoint, QPointF, Qt
+from PyQt6.QtGui import QShortcut, QWheelEvent
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox, QPushButton
 
-from osvev_app import OSVEV, TimeRangeDialog, VIDEO_INPUT_FILTER
+from osvev_app import OSVEV, TimeRangeDialog, VIDEO_INPUT_FILTER, default_open_directory
 
 
 class NavigationUITests(unittest.TestCase):
@@ -58,6 +58,34 @@ class NavigationUITests(unittest.TestCase):
         self.assertFalse(any("Open Time Range" in button.text() for button in buttons))
         for button in navigation[:2] + navigation[3:]:
             self.assertTrue(button.toolTip())
+
+    def test_wheel_over_controls_scrolls_pane_without_changing_values(self):
+        area = self.viewer.controls_scroll_area
+        area.setMaximumHeight(180)
+        self.viewer.show()
+        self.app.processEvents()
+        scrollbar = area.verticalScrollBar()
+        self.assertGreater(scrollbar.maximum(), 0)
+
+        controls = (
+            (self.viewer.playback_speed_dropdown, lambda: self.viewer.playback_speed_dropdown.currentIndex()),
+            (self.viewer.volume_slider, self.viewer.volume_slider.value),
+            (self.viewer.brightness_slider, self.viewer.brightness_slider.value),
+            (self.viewer.crop_spins["crop_top"], self.viewer.crop_spins["crop_top"].value),
+            (self.viewer.rotation_dropdown, lambda: self.viewer.rotation_dropdown.currentIndex()),
+        )
+        for widget, value in controls:
+            before = value()
+            position = widget.rect().center()
+            event = QWheelEvent(
+                QPointF(position), QPointF(widget.mapToGlobal(position)),
+                QPoint(), QPoint(0, -120), Qt.MouseButton.NoButton,
+                Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.ScrollUpdate, False,
+            )
+            QApplication.sendEvent(widget, event)
+            self.app.processEvents()
+            self.assertEqual(value(), before)
+        self.assertGreater(scrollbar.value(), 0)
 
     def test_iframe_navigation_uses_picture_type_not_keyframe_and_skips_current(self):
         self.viewer.current_frame_index = 3
@@ -259,6 +287,7 @@ class NavigationUITests(unittest.TestCase):
                 self.viewer.open_button.click()
                 load.assert_called_once_with(name)
                 self.assertEqual(pick.call_args.args[3], VIDEO_INPUT_FILTER)
+                self.assertEqual(pick.call_args.args[2], default_open_directory())
 
     def test_selected_range_routes_to_existing_partial_loader(self):
         self.viewer.decoder_backend = "pyav"

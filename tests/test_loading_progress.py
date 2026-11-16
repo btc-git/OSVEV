@@ -134,6 +134,7 @@ class LoadingDialogTests(unittest.TestCase):
         self.candidate.get.side_effect = lambda prop: 4 if prop == cv2.CAP_PROP_FRAME_COUNT else 30
         self.candidate.read.return_value = (True, np.zeros((16, 24, 3), dtype=np.uint8))
         self.candidate.native_samples = None
+        self.candidate.display_rotation = 0
 
     def tearDown(self):
         self.viewer.close()

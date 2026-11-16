@@ -219,15 +219,17 @@ class RotationExportTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
 
-    def plan(self, kind, rotation, name, *, zoom=1, interpolation="Nearest", **extra):
+    def plan(self, kind, rotation, name, *, zoom=1, interpolation="Nearest", source=None,
+             metadata=None, **extra):
         from ffmpeg_export import build_export_plan
         extension = {"png": ".png", "ffv1": ".mkv", "h264": ".mp4"}[kind]
         settings = {"contrast": 20, "crop_top": 1, "crop_bottom": 3, "crop_left": 5,
                     "crop_right": 7, **extra}
         if rotation is not None:
             settings["rotation"] = rotation
-        return build_export_plan(str(self.source), str(self.root / (name + extension)), kind,
-                                 1, 2 if kind != "png" else 1, settings, self.metadata, "pyav",
+        return build_export_plan(str(source or self.source), str(self.root / (name + extension)),
+                                 kind, 1, 2 if kind != "png" else 1, settings,
+                                 metadata or self.metadata, "pyav",
                                  zoom_level=zoom, interpolation=interpolation)
 
     def test_rotated_exports_are_exact_verified_and_documented(self):
@@ -264,6 +266,45 @@ class RotationExportTests(unittest.TestCase):
                         # Independent of the processor: exact rotation of the unrotated export.
                         np.testing.assert_array_equal(
                             cv2.imread(str(plan.output_path(0))), rotate_image(unrotated, rotation))
+
+    def test_display_rotated_source_exports_without_display_metadata(self):
+        from export_runner import execute_export
+        from frame_info import FrameInfoHandler
+        source = self.root / "display-rotated.mp4"
+        subprocess.run(["ffmpeg", "-v", "error", "-display_rotation:v:0", "90", "-i",
+                        str(self.source), "-c:v", "copy", str(source)],
+                       check=True, capture_output=True, timeout=60)
+        metadata = FrameInfoHandler.get_frame_metadata(str(source))
+        plain = self.plan("png", 270, "plain")
+        self.assertIsNone(plain.source_display_rotation)
+        self.assertNotIn("sidedata", plain.filter_graph)
+        execute_export(plain, self.metadata)
+        for kind in ("png", "ffv1", "h264"):
+            with self.subTest(kind=kind):
+                # 90° counter-clockwise display matrix; Rotate 270° clockwise shows it upright.
+                plan = self.plan(kind, 270, f"display-{kind}", source=source, metadata=metadata)
+                self.assertEqual(plan.source_display_rotation, 90)
+                self.assertTrue(plan.filter_graph.startswith(
+                    "sidedata=mode=delete:type=DISPLAYMATRIX,trim="))
+                report = execute_export(plan, metadata)
+                self.assertTrue(report["status"].startswith("verified_"), report.get("error"))
+                self.assertEqual((plan.width, plan.height), (44, 52))
+                self.assertEqual(report["source_display_rotation"],
+                                 {"clockwise_degrees": 270, "copied_to_output": False})
+                self.assertIn("Source display-rotation metadata: 270° clockwise; not copied",
+                              plan.log_path.read_text(encoding="utf-8"))
+                output = plan.output_path(0)
+                probe = subprocess.run(
+                    ["ffprobe", "-v", "error", "-show_streams", "-show_frames", "-of", "json",
+                     str(output)], check=True, capture_output=True, text=True, timeout=60)
+                # Stream side data is "Display Matrix"; frame side data is "3x3 displaymatrix".
+                self.assertNotIn("display matrix", probe.stdout.lower())
+                self.assertNotIn("displaymatrix", probe.stdout.lower())
+                if kind == "png":
+                    self.assertNotIn(b"eXIf", output.read_bytes())
+                    np.testing.assert_array_equal(
+                        cv2.imread(str(output), cv2.IMREAD_UNCHANGED),
+                        cv2.imread(str(plain.output_path(0)), cv2.IMREAD_UNCHANGED))
 
     def test_zero_rotation_preserves_existing_plan_and_invalid_rotation_is_rejected(self):
         from ffmpeg_export import ExportError

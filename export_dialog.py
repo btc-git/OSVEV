@@ -2,6 +2,8 @@
 # Copyright © 2026 CrimLawTech LLC
 """Small command-first export dialog; no live preview or rendering architecture."""
 
+from pathlib import Path
+
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
     QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
@@ -121,7 +123,8 @@ class ExportDialog(QDialog):
     def _browse(self):
         filters = ["PNG images (*.png)", "Matroska FFV1 (*.mkv)", "H.264 MP4 (*.mp4)"]
         path, _ = QFileDialog.getSaveFileName(
-            self, "Choose a NEW output name", "", filters[self.format_combo.currentIndex()]
+            self, "Choose a NEW output name", str(Path(self.source).absolute().parent),
+            filters[self.format_combo.currentIndex()]
         )
         if path:
             self.path_edit.setText(path)

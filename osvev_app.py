@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QPushButton, QVBoxLa
                             QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy,
                             QGridLayout, QProgressBar, QFrame, QAbstractScrollArea, QSpinBox,
                             QDialog, QDialogButtonBox, QFormLayout, QLineEdit)
-from PyQt6.QtCore import Qt, QTimer, QPoint, QRect, QSize, QEventLoop, QEvent
+from PyQt6.QtCore import Qt, QTimer, QPoint, QRect, QSize, QEventLoop, QEvent, QDir, QStandardPaths
 from PyQt6.QtGui import (QImage, QPixmap, QCursor, QPainter, QPen, QColor, QFont,
                          QIcon, QKeySequence, QShortcut)
 
@@ -45,6 +45,44 @@ from version import (APP_NAME, COPYRIGHT, LICENSE_NAME, SOURCE_URL, __version__,
                      git_commit, resource_path)
 
 VIDEO_INPUT_FILTER = "Video Files (*.mp4 *.mov *.avi *.mkv *.m4v)"
+
+
+def default_open_directory():
+    desktop = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation)
+    if desktop and os.path.isdir(desktop):
+        return desktop
+    return QDir.rootPath()
+
+
+def scroll_parent_on_wheel(widget, event):
+    parent = widget.parentWidget()
+    while parent is not None and not isinstance(parent, QAbstractScrollArea):
+        parent = parent.parentWidget()
+    if parent is None:
+        event.ignore()
+        return
+    scrollbar = parent.verticalScrollBar()
+    delta = event.pixelDelta().y()
+    if not delta:
+        delta = round(event.angleDelta().y() * scrollbar.singleStep() * 3 / 120)
+    if delta:
+        scrollbar.setValue(scrollbar.value() - delta)
+    event.accept()
+
+
+class WheelSafeSlider(QSlider):
+    def wheelEvent(self, event):
+        scroll_parent_on_wheel(self, event)
+
+
+class WheelSafeSpinBox(QSpinBox):
+    def wheelEvent(self, event):
+        scroll_parent_on_wheel(self, event)
+
+
+class WheelSafeComboBox(QComboBox):
+    def wheelEvent(self, event):
+        scroll_parent_on_wheel(self, event)
 
 
 class TimeRangeDialog(QDialog):
@@ -177,6 +215,11 @@ class TimeRangeDialog(QDialog):
 DISCLAIMERS_HTML = """
 <p><b>In active development and testing. Not a validated forensic tool;
 verify all findings independently.</b></p>
+<p><b>Found a bug, have a feature request, or need help using the app?</b>
+<a href="{url}/issues" style="color: #0057b8;">View open issues</a> or
+<a href="{url}/issues/new/choose" style="color: #0057b8;">open a new issue</a>.
+Issues are public. Redact sensitive details from any information, screenshots,
+or logs you submit.</p>
 <ul>
 <li>OSVEV is an inspection and teaching aid and may contain errors.</li>
 <li>The Main View, Magnified View, interpolation, highlights and JPEG simulation
@@ -244,10 +287,42 @@ class AboutDialog(QDialog):
         header.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         layout.addWidget(header)
         tabs = QTabWidget()
+        guide = QTextBrowser()
+        guide.setHtml(
+            "<h2>Using OSVEV</h2>"
+            "<p><b>Open:</b> Choose a video. OSVEV reads the selected source; it does not write to it. "
+            "Compatible videos are not copied automatically. A separate working copy is offered for "
+            "compatibility problems, and is written as a new file.</p>"
+            "<p><b>Settings:</b> Scroll over the settings pane to move through it. The wheel does not "
+            "change sliders, number boxes, or drop-down settings; use the mouse or keyboard controls.</p>"
+            "<p><b>Working copies:</b> These are video-only FFV1/MKV files. Audio, subtitles, data, "
+            "and other video streams are excluded. They can take time and use much more disk space "
+            "than the input. The displayed uncompressed-pixel estimate is not a prediction of the "
+            "compressed file size; temporary conversion and verification files also need space. "
+            "Existing files are never overwritten. The conversion log records the input/output "
+            "hashes, color assumptions, timing decisions, and any applied display rotation.</p>"
+            "<p><b>Display rotation:</b> Phone videos often store their pixels sideways, with "
+            "metadata telling players how to turn them. A supported right-angle display rotation "
+            "opens directly: Rotate is set to match it, and the stored pixels are not changed. Crop "
+            "sides and source pixel coordinates refer to the frame as stored in the file. Exports "
+            "are oriented only by Rotate and do not copy the display-rotation metadata, so other "
+            "players do not rotate them again. If a working copy is needed for another reason, it "
+            "rotates the decoded pixels and removes the display-matrix metadata; pixel coordinates "
+            "and dimensions therefore change in that new copy. Other transforms, such as flips, "
+            "scaling, perspective, or shears, are refused.</p>"
+            "<p>Missing color metadata and non-original timing require separate explicit choices; "
+            "those choices are recorded, not verified source facts.</p>"
+            "<p><b>Export:</b> Exports are new files and never overwrite an existing destination. "
+            "Lossless exports preserve processed RGB pixels, not original native YUV samples. "
+            "Audio preview is for listening only; it is not evidence-grade synchronization.</p>"
+            "<p><b>Limits:</b> OSVEV is an inspection and teaching aid, not a validated forensic "
+            "tool. Verify findings independently and preserve the original recording and its hash.</p>"
+        )
         disclaimers = QTextBrowser()
         disclaimers.setOpenExternalLinks(True)
         disclaimers.setHtml(DISCLAIMERS_HTML.format(url=SOURCE_URL))
         tabs.addTab(disclaimers, "Disclaimers")
+        tabs.addTab(guide, "User guide")
         for title, name in (("License (GPL-3.0)", "LICENSE"),
                             ("Third-party notices", "THIRD_PARTY_NOTICES.md")):
             text = QPlainTextEdit()
@@ -314,6 +389,7 @@ class OSVEV(QWidget):
         self._exact_sample = None
         self.frame_metadata = []
         self.source_range = None
+        self.file_display_rotation = 0  # clockwise Rotate value matching the file's display matrix
         self.current_pixel_pos = QPoint(0, 0)
         self.current_zoomed_roi = None
         self.shown = False
@@ -615,6 +691,7 @@ class OSVEV(QWidget):
     def _create_controls_widget(self):
         """Create controls widget."""
         controls_container = QScrollArea()
+        self.controls_scroll_area = controls_container
         controls_container.setWidgetResizable(True)
         controls_container.setVerticalScrollBarPolicy(QtCompat.ScrollBarAlwaysOn)
         controls_container.setHorizontalScrollBarPolicy(QtCompat.ScrollBarAlwaysOff)
@@ -650,7 +727,7 @@ class OSVEV(QWidget):
         speed_layout = QHBoxLayout()
         speed_layout.setSpacing(6)
         speed_layout.addWidget(QLabel("Play Speed:"))
-        self.playback_speed_dropdown = QComboBox()
+        self.playback_speed_dropdown = WheelSafeComboBox()
         self.playback_speed_dropdown.addItems(["0.05x", "0.1x", "0.25x", "0.5x", "0.75x", "1x", "2x", "3x", "4x", "5x"])
         self.playback_speed_dropdown.setCurrentText("1x")
         self.playback_speed_dropdown.setFixedWidth(100)
@@ -700,7 +777,7 @@ class OSVEV(QWidget):
         audio_layout = QHBoxLayout(self.audio_controls)
         audio_layout.setContentsMargins(0, 0, 0, 0)
         audio_layout.addWidget(QLabel("Volume:"))
-        self.volume_slider = QSlider(QtCompat.Horizontal)
+        self.volume_slider = WheelSafeSlider(QtCompat.Horizontal)
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(50)
         self.volume_slider.setMaximumWidth(110)
@@ -709,16 +786,17 @@ class OSVEV(QWidget):
         self.volume_value_label = QLabel("50%")
         self.volume_value_label.setMinimumWidth(34)
         self.audio_status_label = QLabel()
-        self.audio_track_dropdown = QComboBox()
+        self.audio_track_dropdown = WheelSafeComboBox()
         self.audio_track_dropdown.setMaximumWidth(110)
         self.audio_track_dropdown.setToolTip(
-            "Select a Qt-discovered audio track. Qt track numbers are not container stream indices.")
+            "Select an audio track listed by the player. Track numbers are not container stream indices.")
         self.audio_track_dropdown.hide()
         self.audio_track_dropdown.activated.connect(self._select_audio_track)
         self.audio_status_label.setToolTip(
-            "Container streams and Qt-discovered tracks are counted separately. "
-            "For multiple streams, the selected codec comes from Qt; ch ? and Hz ? "
-            "mean Qt does not expose channels/sample rate. No container/Qt track "
+            "Audio tracks counts the file's audio streams. If the player's count differs, both are shown. "
+            "The player listing a track does not guarantee it can play it. "
+            "For multiple streams, the selected codec comes from Qt Multimedia; ch ? and Hz ? "
+            "mean it does not expose channels/sample rate. No stream-to-track "
             "mapping is assumed. A stream may contain silence. Playback is 1x only "
             "and silent while scrubbing."
         )
@@ -736,7 +814,7 @@ class OSVEV(QWidget):
         
         # Brightness
         controls_layout.addWidget(QLabel("Brightness:"))
-        self.brightness_slider = QSlider(QtCompat.Horizontal)
+        self.brightness_slider = WheelSafeSlider(QtCompat.Horizontal)
         self.brightness_slider.setRange(-100, 100)
         self.brightness_slider.setValue(0)
         self.brightness_slider.setToolTip(
@@ -746,14 +824,14 @@ class OSVEV(QWidget):
         
         # Contrast
         controls_layout.addWidget(QLabel("Contrast:"))
-        self.contrast_slider = QSlider(QtCompat.Horizontal)
+        self.contrast_slider = WheelSafeSlider(QtCompat.Horizontal)
         self.contrast_slider.setRange(-100, 100)
         self.contrast_slider.setValue(0)
         controls_layout.addWidget(self.contrast_slider)
         
         # Sharpness
         controls_layout.addWidget(QLabel("Sharpness:"))
-        self.sharpness_slider = QSlider(QtCompat.Horizontal)
+        self.sharpness_slider = WheelSafeSlider(QtCompat.Horizontal)
         self.sharpness_slider.setRange(0, 100)
         self.sharpness_slider.setValue(0)
         self.sharpness_slider.setToolTip(
@@ -765,7 +843,7 @@ class OSVEV(QWidget):
         crop_layout.addWidget(QLabel("Crop (pixels, after enhancements):"), 0, 0, 1, 4)
         self.crop_spins = {}
         for index, name in enumerate(CROP_KEYS):
-            spin = QSpinBox()
+            spin = WheelSafeSpinBox()
             spin.setRange(0, 100000)
             spin.setToolTip(
                 "Exact pixels removed from this edge. Crop must leave a nonempty image. "
@@ -781,12 +859,14 @@ class OSVEV(QWidget):
         # Rotation (exact, after crop and before zoom)
         rotate_layout = QHBoxLayout()
         rotate_layout.addWidget(QLabel("Rotate:"))
-        self.rotation_dropdown = QComboBox()
+        self.rotation_dropdown = WheelSafeComboBox()
         for degrees in ROTATIONS:
             self.rotation_dropdown.addItem(ROTATION_LABELS[degrees], degrees)
         self.rotation_dropdown.setToolTip(
             "Exact 90-degree pixel rotation after crop and before Zoom Level; no "
-            "interpolation. Applies to the Main View, Magnified View and verified exports."
+            "interpolation. Applies to the Main View, Magnified View and verified exports. "
+            "Opening a file with display-rotation metadata sets this to match. Crop sides "
+            "refer to the frame as stored in the file."
         )
         rotate_layout.addWidget(self.rotation_dropdown)
         rotate_layout.addStretch()
@@ -795,7 +875,7 @@ class OSVEV(QWidget):
         # Zoom level
         zoom_layout = QHBoxLayout()
         zoom_layout.addWidget(QLabel("Zoom Level:"))
-        self.zoom_dropdown = QComboBox()
+        self.zoom_dropdown = WheelSafeComboBox()
         self.zoom_dropdown.addItems(["1x", "2x", "3x", "4x", "5x", "8x", "10x", "15x", "20x", "25x", "30x"])
         self.zoom_dropdown.setCurrentText("1x")
         self.zoom_dropdown.setFixedWidth(100)
@@ -806,7 +886,7 @@ class OSVEV(QWidget):
         # Interpolation
         interp_layout = QHBoxLayout()
         interp_layout.addWidget(QLabel("Interpolation Method:"))
-        self.interpolation_dropdown = QComboBox()
+        self.interpolation_dropdown = WheelSafeComboBox()
         self.interpolation_dropdown.addItems(["Nearest", "Bilinear", "Bicubic", "Lanczos"])
         self.interpolation_dropdown.setFixedWidth(100)
         interp_layout.addWidget(self.interpolation_dropdown)
@@ -849,7 +929,7 @@ class OSVEV(QWidget):
         
         # Compression
         controls_layout.addWidget(QLabel("JPEG Compression Simulation:"))
-        self.compression_slider = QSlider(QtCompat.Horizontal)
+        self.compression_slider = WheelSafeSlider(QtCompat.Horizontal)
         self.compression_slider.setRange(0, 99)
         self.compression_slider.setValue(0)
         self.compression_slider.setToolTip(
@@ -894,7 +974,7 @@ class OSVEV(QWidget):
         # Additional zoom slider
         nn_zoom_layout = QHBoxLayout()
         nn_zoom_layout.addWidget(QLabel("Additional Zoom:"))
-        self.nn_zoom_slider = QSlider(QtCompat.Horizontal)
+        self.nn_zoom_slider = WheelSafeSlider(QtCompat.Horizontal)
         self.nn_zoom_slider.setRange(1, 50)
         self.nn_zoom_slider.setValue(1)
         self.nn_zoom_slider.setToolTip(
@@ -1238,7 +1318,8 @@ class OSVEV(QWidget):
 
     def choose_video(self):
         """Choose scope before invoking the unchanged full/partial loading paths."""
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Video", "", VIDEO_INPUT_FILTER)
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Open Video", default_open_directory(), VIDEO_INPUT_FILTER)
         if not file_path:
             return
         accepted, time_range = TimeRangeDialog.get_open_choice(
@@ -1252,7 +1333,8 @@ class OSVEV(QWidget):
 
     def open_video(self):
         """Open a video file."""
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Video", "", VIDEO_INPUT_FILTER)
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Open Video", default_open_directory(), VIDEO_INPUT_FILTER)
         if not file_path:
             return
         self._load_video(file_path)
@@ -1263,7 +1345,7 @@ class OSVEV(QWidget):
             QMessageBox.warning(self, "Open Time Range",
                                 "Exact partial indexing requires the PyAV decoder.")
             return
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Video Time Range", "",
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Video Time Range", default_open_directory(),
                                                    VIDEO_INPUT_FILTER)
         if not file_path:
             return
@@ -1356,6 +1438,12 @@ class OSVEV(QWidget):
                 spin.blockSignals(True)
                 spin.setValue(0)
                 spin.blockSignals(False)
+            if self.decoder_backend == "pyav":
+                # Show the file upright as its display matrix requests; stored pixels stay unrotated.
+                self.file_display_rotation = -self.cap.display_rotation % 360
+                self.rotation_dropdown.blockSignals(True)
+                self.rotation_dropdown.setCurrentIndex(ROTATIONS.index(self.file_display_rotation))
+                self.rotation_dropdown.blockSignals(False)
             self.process_cache.clear()
             self.timeline_slider.setMaximum(frame_count - 1)
             self.timeline_slider.setValue(0)
@@ -1558,18 +1646,24 @@ class OSVEV(QWidget):
         self.video_time_label.setText(f"{prefix}: {elapsed} / {total}")
 
     def _select_audio_track(self, index):
+        recovering = self._audio.failed
         try:
             self._audio.select_track(index)
         except ValueError as error:
             QMessageBox.warning(self, "Audio Track", str(error))
             self._show_audio_status()
+            return
+        # A failure dropped the audio clock; rejoin playback that is already running.
+        if (recovering and self.is_playing and self._playback_clock is not None
+                and self._audio_source_offset is not None):
+            self._audio.follow(self._playback_clock, self._audio_source_offset)
 
     def _audio_info_text(self):
         streams = getattr(self.cap, "audio_streams", None)
         if not isinstance(streams, (tuple, list)):
-            return "Audio stream info unavailable"
+            return "Audio track info unavailable"
         if not streams:
-            return "No audio streams"
+            return "No audio tracks"
         tracks = self._audio.available_tracks()
         selected = self._audio.active_track()
         if len(streams) == 1 and len(tracks) <= 1:
@@ -1580,12 +1674,14 @@ class OSVEV(QWidget):
             if first.get("sample_rate"):
                 details.append(f"{first['sample_rate']} Hz")
         elif 0 <= selected < len(tracks):
-            details = [f"Qt track {selected + 1}: {tracks[selected]}",
+            details = [f"Track {selected + 1}: {tracks[selected]}",
                        "ch ?, Hz ?"]
         else:
-            details = ["no selected Qt audio track"]
-        count = f"{len(streams)} audio streams" if len(streams) > 1 else "1 audio stream"
-        return f"{count}: " + ", ".join(details) + f" | {len(tracks)} Qt tracks"
+            details = ["no audio track selected"]
+        count = f"Audio tracks: {len(streams)}"
+        if len(streams) != len(tracks):
+            count += f" in file | player shows {len(tracks)}"
+        return count + " | " + ", ".join(details)
 
     def _show_audio_status(self, status=None):
         tracks = self._audio.available_tracks()
@@ -1595,7 +1691,7 @@ class OSVEV(QWidget):
             [f"Track {index + 1}" for index in range(len(tracks))])
         self.audio_track_dropdown.setCurrentIndex(self._audio.active_track())
         self.audio_track_dropdown.blockSignals(False)
-        self.audio_track_dropdown.setVisible(len(tracks) > 1 and not self._audio.failed)
+        self.audio_track_dropdown.setVisible(len(tracks) > 1)
         info = self._audio_info_text()
         has_audio = getattr(self.cap, "has_audio", False) is True
         if not has_audio:
@@ -2006,7 +2102,7 @@ class OSVEV(QWidget):
         self.contrast_slider.setValue(0)
         self.sharpness_slider.setValue(0)
         self.compression_slider.setValue(0)
-        self.rotation_dropdown.setCurrentIndex(0)
+        self.rotation_dropdown.setCurrentIndex(ROTATIONS.index(self.file_display_rotation))
         self.zoom_dropdown.setCurrentText("1x")
         self.interpolation_dropdown.setCurrentText("Nearest")
         self.match_export_checkbox.setChecked(False)
@@ -2054,6 +2150,10 @@ class OSVEV(QWidget):
             if rotation:
                 row_data.append(("Rotation", f"{ROTATION_LABELS[rotation]} after crop, before "
                                  "Zoom Level; exact pixels, no interpolation"))
+            if self.file_display_rotation:
+                row_data.append(("File Display Rotation",
+                                 f"{ROTATION_LABELS[self.file_display_rotation]} (file metadata); "
+                                 "stored pixels and crop sides are unrotated"))
             if self.decoder_backend == "pyav" and self.current_native_samples is not None:
                 native = self.current_native_samples
                 row_data = [

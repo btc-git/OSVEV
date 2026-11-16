@@ -22,7 +22,9 @@ export details are in [Export and reproducibility](EXPORTING.md).
   - Exact top/bottom/left/right pixel crop, after enhancements, without output resizing
   - **Rotate** (0° Original, 90° clockwise, 180°, 270° clockwise): exact 90-degree
     pixel rotation after crop and before Zoom Level, without interpolation; applied
-    to the Main View, Magnified View, Pixel Inspector mapping and verified exports
+    to the Main View, Magnified View, Pixel Inspector mapping and verified exports.
+    Opening a file with a supported display rotation sets Rotate to match it; crop
+    sides still refer to the frame as stored in the file
   - JPEG compression teaching simulation (after the core enhancements)
 - Detailed frame information panel
 - **File** row above Play Speed: the loaded file's name (hover for the full path;
@@ -49,7 +51,11 @@ export details are in [Export and reproducibility](EXPORTING.md).
 
 ### Controls
 
-- **Open**: Choose a video, then Entire Video (default) or Selected Time Range
+- **Open**: Choose a video, then Entire Video (default) or Selected Time Range.
+  The file picker starts at the Desktop; Export starts in the selected input's
+  folder.
+- **Settings pane**: The mouse wheel scrolls the pane without changing controls.
+  Use click/drag, the spin-box arrows, typing, or the dropdown to change values.
 - **File** name (above Play Speed): Click to show the loaded file in its folder;
   **FFprobe Info** shows its container and stream header information
 - **Reset**: Reset all adjustments to defaults
@@ -132,8 +138,15 @@ accepted frame and reports the failure. Initial opening is not a full-file
 corruption certification. Export/reference decoding and working-copy conversion
 also stop on decode errors; transcoding cannot establish missing original pixels.
 Color, timing and recovered-count permissions do not waive this safeguard.
-Rotation tags and display matrices (including zero-angle flip/shear matrices)
-are rejected, not silently ignored or applied. Color-managed monitor reproduction
+Legacy rotation tags and display matrices other than one constant pure 90°, 180° or
+270° rotation (including zero-angle flip/shear matrices) are rejected, not silently
+ignored or applied. A supported display rotation opens directly: decoded pixels,
+crop sides and Pixel Inspector source coordinates stay as stored in the file, and
+Rotate is set to match the matrix. PyAV and FFprobe must agree on that rotation
+for every frame. Exports remove the source matrix
+(`sidedata=mode=delete:type=DISPLAYMATRIX`), so MKV/MP4 outputs carry no display
+matrix and PNGs no EXIF orientation; only Rotate orients exported pixels, and the
+processing log records the removed rotation. Color-managed monitor reproduction
 is not implemented. No runtime-version-independent hash guarantee is claimed.
 Packaged executables are not independently certified.
 
@@ -310,17 +323,23 @@ differ from a player's clock if the stream does not start at 0.
 
 ### Convenience audio
 
-The audio line shows Volume (0–100%, with its percentage), Mute, container audio
-stream count, Qt-discovered track count, and the actual output state:
+The audio line shows Volume (0–100%, with its percentage), Mute, **Audio tracks**
+(the number of audio streams in the file), and the actual output state:
 Loading, Playing, Paused, Off (1x playback
 only), Not playing (outside audio track), Unavailable, and whether muted.
-When Qt exposes multiple tracks, a compact selector switches its active audio
-track without changing video playback, volume or mute. The selected codec comes
-from Qt. Qt does not expose per-track channels/sample rate; **ch ?, Hz ?** mark
-them unavailable for multitrack sources rather than assuming container and Qt track
-indices correspond. For a single container stream and at most one Qt track,
+When the player's track count differs, both counts appear, for example
+**Audio tracks: 2 in file | player shows 1**. A listed track is not a guarantee
+of successful playback. Stereo channels are not counted as separate tracks.
+When Qt Multimedia exposes multiple tracks, a compact selector switches its active audio
+track without changing video playback, volume or mute. If the player cannot decode the
+selected track, the selector stays available: choosing a different track clears the
+failure, provided the media still passes the playable/seekable check used on loading,
+and a track that also fails is reported the same way. The selected codec comes
+from Qt Multimedia. It does not expose per-track channels/sample rate; **ch ?, Hz ?** mark
+them unavailable for multitrack sources rather than assuming container and playback-track
+indices correspond. For a single container stream and at most one playback track,
 codec, channels and sample rate retain their container metadata display.
-"No audio streams" is distinguished from a stream that exists but cannot be
+"No audio tracks" is distinguished from a stream that exists but cannot be
 played (whose reason is shown beside it). The presence of a stream does not mean
 it contains audible sound; no audio analysis is performed. Original audio plays through
 Qt's independent media player at **1x only**, follows pause/resume and seeks, and
@@ -328,9 +347,15 @@ restarts at the loaded video/time-range loop boundary. Frame stepping and other
 playback speeds are silent. Videos without audio retain video-only behavior.
 Audio failures appear inline and do not prevent video inspection.
 
-Audio follows the existing source-time playback clock with periodic correction
-when reported drift exceeds 150 ms; startup, seeks, device buffering, and heavy
-video processing can still cause audible/visible offsets. This is convenient
+Audio follows the existing source-time playback clock. When reported drift
+exceeds 150 ms, it re-seeks, but only after the previous seek's audio is actually
+playing, at increasing intervals (0.75 s doubling to 30 s) while drift persists.
+The startup latency measured after seeks made while audio is already playing (up
+to 1 s) is applied to later seeks, so slower PCs converge instead of restarting
+the audio about every second; the one-time delay of starting playback is not
+learned. Startup,
+seeks, device buffering, and heavy video processing can still cause
+audible/visible offsets. This is convenient
 listening, **not sample-accurate forensic synchronization**. Missing/ambiguous
 source timing disables audio rather than guessing. The explicit legacy OpenCV
 decoder remains video-only.
@@ -492,7 +517,9 @@ recovers timing, but cannot make such a stall itself invisible.
 
 Recognized input compatibility failures offer **Create Compatible Working Copy**.
 This is separate from normal opening and never changes the verified decoder's
-requirements. Unrelated I/O errors and cancelled loading do not offer conversion.
+requirements. Normal opening reads the selected source without modifying it;
+compatible files are not copied automatically. Unrelated I/O errors and cancelled
+loading do not offer conversion.
 For missing color tags, the existing interpretation dialog also offers this
 alternative. Choosing it starts a separate, cancellable preflight, then lets you
 choose a new filename and explicitly authorize any required assumptions.
@@ -507,14 +534,25 @@ permissions when needed, keeping progress and action buttons accessible.
 Conversion, full-index validation and per-frame verification are separate passes
 and can take time. Lossless RGB copies can be much larger and less smooth to
 play than a compressed original; they are optional compatibility derivatives,
-not optimized playback proxies or universal file repair.
+not optimized playback proxies or universal file repair. After source inspection,
+the dialog shows an uncompressed-pixel estimate, not a predicted FFV1 file size;
+actual compression depends on the video, and staging/verification need extra
+free space.
 
 The working copy is **video-only FFV1/MKV, packed 8-bit RGB**. The original is
-not modified. Audio, subtitles, data and other video streams are excluded.
+read-only: OSVEV hashes it before conversion, verifies it again before
+publication, and never uses it as an output destination. Audio, subtitles, data
+and other video streams are excluded.
 This initial converter handles constant, even-sized, progressive 8-bit YUV420
 MPEG-4 Part 2, H.264, HEVC and YUV FFV1 with supported SDR interpretation.
-It refuses HDR, interlaced/high-bit-depth inputs, display transforms, changing
-format/color declarations and unsupported or conflicting explicit color tags.
+It refuses HDR, interlaced/high-bit-depth inputs, display flips/scaling/perspective/shears,
+changing format/color declarations and unsupported or conflicting explicit color tags.
+For a verified pure 90°, 180° or 270° display rotation, the working copy applies
+the rotation to decoded pixels and removes the display matrix; verification refuses
+a copy that still carries one. (Such a rotation
+alone does not require a working copy; those files open directly.) This changes the
+copy's pixel coordinates (and, for quarter turns, its dimensions); the operation
+is recorded in the conversion log. The source is not rotated or rewritten.
 It reuses the verified left/center chroma conversion. Missing matrix/range need
 explicit selections; missing primaries/transfer assume SDR matching the effective
 matrix, and missing chroma assumes left. These are assumptions, not verified

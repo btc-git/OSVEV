@@ -321,7 +321,12 @@ Zoom Level and Interpolation Method are exported through export-only scaling.
 Audio, other streams, JPEG compression simulation, the right-side Magnified View,
 Additional Zoom, lens/crosshair graphics, highlights and overlays are excluded.
 Autorotation is disabled to match the viewer's native
-orientation; metadata is not copied wholesale into exports.
+orientation; metadata is not copied wholesale into exports. A source with a
+supported right-angle display matrix gets a leading
+`sidedata=mode=delete:type=DISPLAYMATRIX` filter: FFmpeg would otherwise copy
+the matrix into MKV/MP4 outputs (and EXIF orientation into PNG), so players
+would rotate the export again. Exported pixels are oriented only by Rotate,
+and the log/report record the removed source display rotation.
 
 Verified 8-bit SDR HEVC input uses the same explicit YUV420 conversion,
 source PTS index and export verification as H.264; 10-bit/HDR is not supported.
@@ -342,7 +347,8 @@ shell; it does not pipe live preview frames into an encoder.
 
 The common filter chain is:
 
-1. `trim=start_frame=...:end_frame=...` (exclusive end in the command).
+1. `trim=start_frame=...:end_frame=...` (exclusive end in the command), preceded
+   by `sidedata=mode=delete:type=DISPLAYMATRIX` only when the source has a display matrix.
 2. Video `settb` and rational speed-scaled `setpts`; PNG `setpts=PTS-STARTPTS`.
 3. Explicit bicubic matrix/range conversion to full-range BGR24.
 4. The shared brightness/contrast/sharpening nodes when enabled.

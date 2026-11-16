@@ -10,6 +10,12 @@ OSVEV is a tool for visualizing the effects of different video adjustment filter
 ⚠️ **In active development and testing. Not a validated forensic tool; verify all findings independently.**
 OSVEV is an inspection and teaching aid. See [Important Disclaimers](#important-disclaimers).
 
+**Found a bug, have a feature request, or need help using the app?**
+[View open issues](https://github.com/btc-git/OSVEV/issues) or
+[open a new issue](https://github.com/btc-git/OSVEV/issues/new/choose).
+Issues are public. Redact sensitive details from any information, screenshots,
+or logs you submit.
+
 ## Download
 
 1. **[Download OSVEV.exe](https://github.com/btc-git/OSVEV/releases/latest/download/OSVEV.exe)**
@@ -22,8 +28,9 @@ OSVEV is an inspection and teaching aid. See [Important Disclaimers](#important-
 - OSVEV works offline. It does not upload videos, frames, logs or usage data.
   Links in **About** and the export dialog open in your web browser only when
   clicked.
-- Opening a video does not modify it. Exports and working copies are written
-  as new files.
+- Opening a video is read-only and does not modify it. Exports and working
+  copies are written as separate new files; existing files are never
+  overwritten. A compatible source is not copied automatically.
 - Export logs, optional JSON/JSONL verification files and working-copy logs
   record full source and output paths, file names, hashes and build details.
   Folder names may identify cases or clients; review these files before
@@ -52,7 +59,8 @@ OSVEV is an inspection and teaching aid. See [Important Disclaimers](#important-
    magnifier and Pixel Inspector to examine pixels.
 4. Click **Export** for verified PNG or FFV1/MKV output, or lossy H.264/MP4,
    each with a processing log.
-5. Use **About** for the version, commit, FFmpeg build and licenses.
+5. Use **About** for the in-app user guide, disclaimers, version, commit,
+   FFmpeg build and licenses.
 
 To run or build from source, see [Building from source](docs/BUILDING.md).
 
@@ -61,7 +69,8 @@ To run or build from source, see [Building from source](docs/BUILDING.md).
 - Frame-by-frame, I-frame and timeline navigation with variable playback speed
 - Magnifier with nearest-neighbor, bilinear, bicubic and Lanczos interpolation
 - Brightness, contrast and sharpness (standard FFmpeg filters), exact crop,
-  90-degree rotation and zoom
+  90-degree rotation (set to match a phone video's display rotation on opening)
+  and zoom
 - Pixel Inspector showing native source and processed pixel values
 - File information row and FFprobe header details
 - Preview-only inspection aids: interpolated-pixel highlights and JPEG

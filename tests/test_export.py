@@ -899,6 +899,13 @@ class ExportTests(unittest.TestCase):
         dialog.format_combo.setCurrentIndex(0)
         self.assertFalse(dialog.ffv1_playback_note.isVisible())
 
+    def test_export_save_dialog_starts_in_input_folder(self):
+        dialog = ExportDialog(str(self.source), 0, self.metadata, {}, "pyav")
+        self.addCleanup(dialog.close)
+        with patch.object(QFileDialog, "getSaveFileName", return_value=("", "")) as pick:
+            dialog._browse()
+        self.assertEqual(pick.call_args.args[2], str(Path(self.source).absolute().parent))
+
     def test_dialog_selection_changes_and_unsupported_settings(self):
         dialog = ExportDialog(str(self.source), 2, self.metadata, {}, "pyav")
         self.addCleanup(dialog.close)

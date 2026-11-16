@@ -49,25 +49,37 @@ try {
         }
         $version | Select-Object -First 1
     }
-    $stamp = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
-    $destination = Join-Path $PSScriptRoot "dist\$stamp"
-    $work = Join-Path $PSScriptRoot "build\$stamp"
+    $work = Join-Path $PSScriptRoot 'build'
+    $staging = Join-Path $work 'staging'
+    if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
     # PyInstaller logs to stderr; Windows PowerShell must not treat redirected log lines as errors.
     $ErrorActionPreference = 'Continue'
-    & $Python -m PyInstaller --noconfirm --distpath $destination --workpath $work osvev.spec 2>&1 | ForEach-Object { "$_" }
+    & $Python -m PyInstaller --noconfirm --distpath $staging --workpath $work osvev.spec 2>&1 | ForEach-Object { "$_" }
     $pyinstallerExit = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     if ($pyinstallerExit -ne 0) {
-        throw "PyInstaller failed. Previous builds remain unchanged. See output above."
+        throw "PyInstaller failed. dist\OSVEV.exe was not changed. See output above."
     }
-    $executable = Join-Path $destination 'OSVEV.exe'
-    if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
-        throw "Build did not produce the expected executable: $executable"
+    $built = Join-Path $staging 'OSVEV.exe'
+    if (-not (Test-Path -LiteralPath $built -PathType Leaf)) {
+        throw "Build did not produce the expected executable: $built"
     }
+    $dist = Join-Path $PSScriptRoot 'dist'
+    New-Item -ItemType Directory -Path $dist -Force | Out-Null
+    $executable = Join-Path $dist 'OSVEV.exe'
+    try {
+        Move-Item -LiteralPath $built -Destination $executable -Force
+    }
+    catch {
+        throw "Could not replace $executable (close OSVEV if it is running). The new build is at $built."
+    }
+    $hash = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
+    Set-Content -LiteralPath "$executable.sha256" -Value "$hash *OSVEV.exe" -Encoding Ascii
+    Remove-Item -LiteralPath $staging -Recurse -Force
     Write-Host ""
     Write-Host "Built: $executable"
+    Write-Host "SHA-256: $hash"
     Write-Host "Self-contained single-file application: GPL FFmpeg 9 ffmpeg.exe/ffprobe.exe are bundled and used regardless of PATH."
-    Write-Host "Previous builds were not overwritten."
 }
 finally {
     Pop-Location

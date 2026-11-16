@@ -3,7 +3,7 @@
 # Copyright © 2026 CrimLawTech LLC
 # Build from the activated OSVEV conda environment (environment-eq.yml):
 #     pyinstaller osvev.spec
-# or use build.ps1, which also writes each build to a new dist\<timestamp> folder.
+# or use build.ps1, which builds in build\staging and then replaces dist\OSVEV.exe.
 
 import glob
 import json

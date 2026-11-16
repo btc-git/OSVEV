@@ -32,16 +32,22 @@ class WorkingCopyDialog(QDialog):
         self.options_scroll.setWidget(options)
         outer.addWidget(self.options_scroll, 1)
         notice = QLabel(
-            "Create a new video-only FFV1/MKV working copy. The original remains untouched. "
-            "This converts the entire source, not just a selected time range. "
-            "Audio, subtitles, data and other video streams are excluded.\n\n"
-            "Conversion and complete verification may take time and require much more disk "
-            "space than the original. RGB pixels reflect the recorded color interpretation, "
-            "not preserved native YUV samples. Existing files are never overwritten. "
-            "A working copy is optional when direct opening succeeds."
+            "This creates a new video-only copy; the source is only read and checked for changes. "
+            "Audio, subtitles, and other streams are left out. It can take time and use much more "
+            "disk space than the original. Existing files are never overwritten."
         )
         notice.setWordWrap(True)
+        notice.setToolTip(
+            "The copy converts decoded pixels to FFV1/MKV and verifies every frame independently. "
+            "It preserves the recorded color interpretation, not native YUV samples. The estimate "
+            "shown after inspection is uncompressed pixel data, not a prediction of the compressed "
+            "output size. Staging and verification require additional free space."
+        )
         layout.addWidget(notice)
+        self.display_note = QLabel()
+        self.display_note.setWordWrap(True)
+        self.display_note.setVisible(False)
+        layout.addWidget(self.display_note)
         self.color_note = QLabel()
         self.color_note.setWordWrap(True)
         layout.addWidget(self.color_note)
@@ -54,7 +60,7 @@ class WorkingCopyDialog(QDialog):
         layout.addLayout(self.color_fields)
         self.matrix.setEnabled(False)
         self.range_combo.setEnabled(False)
-        self.derived = QCheckBox("Authorize derived best-effort timing\n(NOT original PTS)")
+        self.derived = QCheckBox("Use estimated timestamps (not original)")
         self.derived.setToolTip("Use complete, nondecreasing FFmpeg best-effort timestamps only; "
                                 "existing original PTS must agree. No frame rate is assumed.")
         self.derived.setVisible(False)
@@ -64,7 +70,11 @@ class WorkingCopyDialog(QDialog):
         self.count_note.setWordWrap(True)
         self.count_note.setVisible(False)
         layout.addWidget(self.count_note)
-        self.count_permission = QCheckBox("Authorize recovered-frame conversion\n(despite frame-count mismatch)")
+        self.count_permission = QCheckBox("Use decoded frames despite the frame-count mismatch")
+        self.count_permission.setToolTip(
+            "The copy includes every recovered frame and adds or removes none. "
+            "A count mismatch does not establish whether the original recording is complete."
+        )
         self.count_permission.setVisible(False)
         self.count_permission.toggled.connect(self._enable_create)
         layout.addWidget(self.count_permission)
@@ -72,7 +82,11 @@ class WorkingCopyDialog(QDialog):
         self.reorder_note.setWordWrap(True)
         self.reorder_note.setVisible(False)
         layout.addWidget(self.reorder_note)
-        self.reorder_permission = QCheckBox("Authorize presenting decoded frames\nin original PTS order")
+        self.reorder_permission = QCheckBox("Put decoded frames in timestamp order")
+        self.reorder_permission.setToolTip(
+            "Only eligible local order reversals are accepted. Pixels and original timestamps "
+            "remain unchanged; the conversion log records the frame mapping."
+        )
         self.reorder_permission.setVisible(False)
         self.reorder_permission.toggled.connect(self._enable_create)
         layout.addWidget(self.reorder_permission)
@@ -80,7 +94,12 @@ class WorkingCopyDialog(QDialog):
         self.precision_note.setWordWrap(True)
         self.precision_note.setVisible(False)
         layout.addWidget(self.precision_note)
-        self.precision_permission = QCheckBox("Authorize bounded millisecond rounding\n(NOT original precision)")
+        self.precision_permission = QCheckBox("Allow timing to be rounded to milliseconds")
+        self.precision_permission.setToolTip(
+            "Each absolute timestamp is rounded independently by at most 0.5 ms. "
+            "Reported durations, intervals, endpoint and overall span may differ by at most 1 ms. "
+            "No new timestamp ties or gap repairs are allowed; all deviations are logged."
+        )
         self.precision_permission.setVisible(False)
         self.precision_permission.toggled.connect(self._enable_create)
         layout.addWidget(self.precision_permission)
@@ -147,27 +166,35 @@ class WorkingCopyDialog(QDialog):
             super().accept()
             return
         self.source = result
+        if self.source.display_rotation:
+            self.display_note.setText(
+                f"The source has a {self.source.display_rotation}° counter-clockwise display rotation. "
+                "This copy will apply that rotation to its pixels and remove the display-matrix metadata. "
+                "The source file remains unchanged."
+            )
+            self.display_note.setVisible(True)
         self.precision_note.setVisible(self.source.needs_rounding)
         self.precision_permission.setVisible(self.source.needs_rounding)
         self.precision_note.setText(
-            "Exact timing cannot be stored by this FFmpeg Matroska muxer. Optional rounding "
-            "changes each absolute presentation time by at most 0.5 ms, and reported durations, "
-            "intervals, endpoint and overall span by at most 1 ms. No cumulative interval rounding, "
-            "new timestamp ties or gap repair. Every original/output time and deviation is logged. "
-            "The working copy is NOT original-precision timing. Leave unchecked to refuse conversion."
+            "This output format cannot store the source's exact timing. The copy will use "
+            "millisecond-rounded timing, so it will not have the original timing precision. "
+            "Leave unchecked to cancel this conversion."
         )
+        self.precision_note.setToolTip(self.precision_permission.toolTip())
         self.count_note.setVisible(self.source.count_mismatch)
         self.count_permission.setVisible(self.source.count_mismatch)
         audit = self.source.count_audit or {}
         packets = f" in {audit['packet_count']} packets" if "packet_count" in audit else ""
         explained = " ".join(audit.get("assumptions", [])) if not audit.get("avi", True) else ""
         self.count_note.setText(
-            f"{self.source.count_label} declares {self.source.declared_count} frames{packets}; "
-            f"independent decoding recovered {len(self.source.frames)}. "
-            + (explained + " " if explained else "")
-            + "Every recovered frame will be verified. The discrepancy "
-            "does not prove the original recording is complete. "
-            "No frames will be added or removed to match the declared count."
+            f"The file declares {self.source.declared_count} frames{packets}; "
+            f"OSVEV decoded {len(self.source.frames)}. This copy includes only decoded frames. "
+            "It cannot confirm whether the recording is complete."
+        )
+        self.count_note.setToolTip(
+            (explained + " " if explained else "")
+            + "Every recovered frame is independently verified. No frames are added or removed "
+            "to match the declared count. The discrepancy does not prove the original recording is complete."
         )
         self.derived.setVisible(self.source.derived_timing)
         self.reorder_note.setVisible(self.source.reordered)
@@ -175,31 +202,43 @@ class WorkingCopyDialog(QDialog):
         if self.source.reordered:
             reorder = self.source.reorder_audit
             self.reorder_note.setText(
-                f"Decoder output order has {reorder['reversal_count']} local presentation-time reversal(s) "
-                + "(" + ", ".join(" -> ".join(f"{float(Fraction(t)):.3f}s" for t in item["times_seconds"])
-                                  for item in reorder["reversals"][:4])
-                + (", ..." if len(reorder["reversals"]) > 4 else "") + "). "
-                f"{reorder['repositioned_frame_count']} frame(s) would be presented in original PTS order "
-                f"(max {reorder['max_displacement_frames']} position(s)). Pixels, original PTS and durations "
-                "are unchanged; no frame is added, duplicated or removed. Every source/output frame mapping "
-                "is verified and logged.")
+                "The decoder returned some frames out of timestamp order. If you allow it, "
+                "the copy will put them in timestamp order without changing their pixels. "
+                "The log will record the changes."
+            )
+            self.reorder_note.setToolTip(
+                f"{reorder['reversal_count']} local timestamp reversal(s); "
+                f"{reorder['repositioned_frame_count']} frame position(s) change, with a maximum "
+                f"displacement of {reorder['max_displacement_frames']}. Original PTS and durations "
+                "are unchanged; no frame is added, duplicated or removed. Every source/output mapping "
+                "is verified and logged."
+            )
         self.derived.setEnabled(True)
         missing = self.source.missing_color
         self.matrix.setEnabled("color_space" in missing)
         self.range_combo.setEnabled("color_range" in missing)
-        self.color_note.setText(
-            "Missing fields: " + ", ".join(missing) + ". Selections fill missing fields only. "
-            "Missing primaries/transfer assume SDR matching the effective matrix; missing "
-            "chroma assumes left. These assumptions are NOT verified source properties. "
-            "Creating the copy authorizes and logs them."
-            if missing else "Color interpretation uses explicit supported source declarations; no assumptions."
-        )
+        if missing:
+            self.color_note.setText(
+                "Some color information is missing. Your choices fill only the blanks; they are "
+                "assumptions, not verified facts. The conversion log records them."
+            )
+            self.color_note.setToolTip(
+                "Missing fields: " + ", ".join(missing) + ". Selections fill missing fields only. "
+                "Missing primaries/transfer assume SDR matching the effective matrix; missing chroma "
+                "assumes left. These assumptions are not verified source properties."
+            )
+        else:
+            self.color_note.setText(
+                "The supported color information is present; no color assumptions are needed."
+            )
+            self.color_note.setToolTip("")
         raw_gib = (self.source.frames[0]["width"] * self.source.frames[0]["height"]
                    * 4 * len(self.source.frames) / 1024 ** 3)
         self.status.setText(
-            f"Ready: {len(self.source.frames):,} frames. Uncompressed RGB estimate: "
-            f"{raw_gib:.2f} GiB (not a size guarantee). Staging/publication needs additional space. "
-            "The conversion log will preserve original and output timing."
+            f"Ready: {len(self.source.frames):,} frames. Rough uncompressed-pixel estimate: "
+            f"{raw_gib:.2f} GiB. This is not a prediction of the FFV1 file size; actual size varies "
+            "with the video, and temporary conversion/verification files need extra disk space. "
+            "The log records timing and any assumptions."
         )
         self.progress.setRange(0, 100)
         self.progress.setValue(0)

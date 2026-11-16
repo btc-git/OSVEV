@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from collections.abc import Callable
 from collections import Counter
 from itertools import chain
+import struct
 import av
 import cv2
 import numpy as np
@@ -80,6 +81,23 @@ def _audio_stream_info(stream):
     }
 
 
+def _display_matrix_rotation(frame: av.VideoFrame) -> int | None:
+    """Counter-clockwise degrees from the frame's display matrix; None without one."""
+    matrices = [side for side in frame.side_data if side.type.name == "DISPLAYMATRIX"]
+    if not matrices:
+        return None
+    if len(matrices) > 1:
+        raise InputDecodeError("Multiple source display matrices are not supported.")
+    data = bytes(matrices[0])
+    if len(data) != 36:
+        raise InputDecodeError("Unsupported source display matrix; its rotation could not be verified.")
+    from frame_info import FrameInfoHandler
+    try:
+        return FrameInfoHandler.display_matrix_rotation(struct.unpack("=9i", data))
+    except ValueError as error:
+        raise InputDecodeError(str(error)) from error
+
+
 class PyAVInputCapture:
     """Small VideoCapture-compatible boundary; no effects, rendering, or cache."""
 
@@ -94,6 +112,10 @@ class PyAVInputCapture:
         self.original_native_color = None
         self.color_audit = None
         self.chroma_location = "left"
+        # Display matrix from the first decoded frame; stored pixels are never rotated here.
+        self.display_rotation = 0  # counter-clockwise degrees
+        self.has_display_matrix = False
+        self._display_checked = False
         self._color_graph = None
         self.native_samples: NativeSamples | NativeRGBSamples | None = None
         self._timestamps: tuple[int, ...] = ()
@@ -217,7 +239,11 @@ class PyAVInputCapture:
         for number, entry in enumerate(metadata):
             if number % 256 == 0 and cancelled is not None and cancelled():
                 raise MetadataCancelled()
-            FrameInfoHandler.validate_display_transforms(entry)
+            if FrameInfoHandler.validate_display_transforms(entry) != self.display_rotation:
+                raise InputDecodeError(
+                    "FFprobe and PyAV disagree on the source display rotation, "
+                    "or it changes between frames."
+                )
             compared = entry
             if not rgb:
                 # Reject explicit HDR side data even if its color tags are unspecified.
@@ -325,8 +351,12 @@ class PyAVInputCapture:
                 "Transcoding cannot establish the missing original pixels."
             )
         rgb = self._stream.codec_context.name == "ffv1"
-        if any(side.type.name == "DISPLAYMATRIX" for side in frame.side_data):
-            raise InputDecodeError("Unsupported source display matrix/rotation; no transform is applied.")
+        rotation = _display_matrix_rotation(frame)
+        if not self._display_checked:
+            self._display_checked = True
+            self.has_display_matrix, self.display_rotation = rotation is not None, rotation or 0
+        elif rotation != (self.display_rotation if self.has_display_matrix else None):
+            raise InputDecodeError("Source display rotation changes between frames.")
         if frame.pts is None:
             raise InputCompatibilityError("Progressive frames with explicit PTS and the stream time base are required.")
         if frame.time_base != self._time_base or frame.interlaced_frame:

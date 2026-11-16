@@ -24,7 +24,7 @@ from export_runner import execute_export
 from ffmpeg_export import build_export_plan
 from frame_info import FrameInfoHandler
 from frame_processor import FrameProcessor
-from osvev_app import OSVEV, TimeRangeDialog, VIDEO_INPUT_FILTER
+from osvev_app import OSVEV, TimeRangeDialog, VIDEO_INPUT_FILTER, default_open_directory
 
 AVAILABLE = importlib.util.find_spec("av") is not None and shutil.which("ffmpeg") and shutil.which("ffprobe")
 if AVAILABLE:
@@ -87,8 +87,10 @@ class VideoInputTests(unittest.TestCase):
         with patch.object(QFileDialog, "getOpenFileName", return_value=("", "")) as dialog:
             viewer.open_video()
             self.assertEqual(dialog.call_args.args[3], VIDEO_INPUT_FILTER)
+            self.assertEqual(dialog.call_args.args[2], default_open_directory())
             viewer.open_time_range()
             self.assertEqual(dialog.call_args.args[3], VIDEO_INPUT_FILTER)
+            self.assertEqual(dialog.call_args.args[2], default_open_directory())
 
     def test_h264_containers_pixels_seeking_and_full_gui_open(self):
         baseline, first, _ = self.indexed(self.source)
@@ -468,34 +470,63 @@ class VideoInputTests(unittest.TestCase):
                 self.assertEqual(report["status"], "verified_lossless")
                 self.assertTrue(report["timing"]["verified"])
 
-    def test_rotation_and_display_matrices_rejected_without_replacing_video(self):
+    def test_display_rotations_open_directly_and_unsupported_matrices_preserve_video(self):
         viewer = OSVEV()
         self.addCleanup(viewer.close)
         with patch.object(QMessageBox, "warning") as warning:
             viewer._load_video(str(self.source))
         warning.assert_not_called()
-        original_capture = viewer.cap
-        original_frame = viewer.current_frame.copy()
-        for name, transform in (
-            ("rotated.mp4", ["-display_rotation:v:0", "90"]),
-            ("rotated.mov", ["-display_rotation:v:0", "90"]),
-            ("flipped.mov", ["-display_hflip:v:0"]),
-        ):
+        stored = viewer.current_frame.copy()
+        source_metadata = FrameInfoHandler.get_frame_metadata(str(self.source))
+        for name in ("rotated.mp4", "rotated.mov"):
             rotated = self.output / name
-            ffmpeg([*transform, "-i", self.source, "-c:v", "copy", rotated])
+            ffmpeg(["-display_rotation:v:0", "90", "-i", self.source, "-c:v", "copy", rotated])
             with self.subTest(input=name):
-                with self.assertRaisesRegex(ValueError, "rotation/display matrix"):
-                    FrameInfoHandler.get_frame_metadata(str(rotated))
+                self.assertTrue(FrameInfoHandler.get_frame_metadata(str(rotated)))
                 capture = PyAVInputCapture(str(rotated))
                 self.addCleanup(capture.release)
-                with self.assertRaisesRegex(InputDecodeError, "display matrix"):
-                    capture.read()
-                with patch.object(QMessageBox, "warning") as warning:
+                ok, frame = capture.read()
+                self.assertTrue(ok)
+                self.assertEqual((capture.display_rotation, capture.has_display_matrix), (90, True))
+                np.testing.assert_array_equal(frame, stored)
+                with self.assertRaisesRegex(InputDecodeError, "display rotation"):
+                    capture.configure_index(source_metadata)
+                viewer.rotation_dropdown.setCurrentIndex(1)
+                with patch.object(viewer, "_offer_working_copy") as offer, \
+                        patch.object(QMessageBox, "warning") as warning:
                     viewer._load_video(str(rotated))
-                warning.assert_called_once()
-                self.assertIn("display matrix", warning.call_args.args[2].lower())
-                self.assertIs(viewer.cap, original_capture)
-                np.testing.assert_array_equal(viewer.current_frame, original_frame)
+                offer.assert_not_called()
+                warning.assert_not_called()
+                self.assertEqual(viewer.video_path, str(rotated))
+                # A 90° counter-clockwise display matrix is Rotate 270° clockwise;
+                # the stored pixels are not rotated.
+                self.assertEqual(viewer.rotation_dropdown.currentData(), 270)
+                np.testing.assert_array_equal(viewer.current_frame, stored)
+                np.testing.assert_array_equal(viewer._get_processed_frame(), np.rot90(stored, 1))
+                viewer.rotation_dropdown.setCurrentIndex(0)
+                viewer.reset_settings()
+                self.assertEqual(viewer.rotation_dropdown.currentData(), 270)
+        with patch.object(QMessageBox, "warning") as warning:
+            viewer._load_video(str(self.source))
+        warning.assert_not_called()
+        self.assertEqual(viewer.rotation_dropdown.currentData(), 0)
+        original_capture = viewer.cap
+        flipped = self.output / "flipped.mov"
+        ffmpeg(["-display_hflip:v:0", "-i", self.source, "-c:v", "copy", flipped])
+        with self.assertRaisesRegex(ValueError, "display matrix"):
+            FrameInfoHandler.get_frame_metadata(str(flipped))
+        capture = PyAVInputCapture(str(flipped))
+        self.addCleanup(capture.release)
+        with self.assertRaisesRegex(InputDecodeError, "display matrix"):
+            capture.read()
+        with patch.object(viewer, "_offer_working_copy") as offer, \
+                patch.object(QMessageBox, "warning") as warning:
+            viewer._load_video(str(flipped))
+        offer.assert_not_called()
+        warning.assert_called_once()
+        self.assertIn("display matrix", warning.call_args.args[2])
+        self.assertIs(viewer.cap, original_capture)
+        np.testing.assert_array_equal(viewer.current_frame, stored)
         for record in (
             {"side_data_list": [{"side_data_type": "Display Matrix", "rotation": 0}]},
             {"tags": {"rotate": "90"}}, {"rotation": 180},

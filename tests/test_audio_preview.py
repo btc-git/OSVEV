@@ -16,7 +16,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtMultimedia import QMediaDevices, QMediaMetaData, QMediaPlayer
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from audio_preview import AudioPreview
+from audio_preview import STALLED_RETRY_S, SYNC_TOLERANCE_MS, AudioPreview
 from ffmpeg_tools import tool_path
 from playback_timing import PlaybackClock, PlaybackTimeline
 from osvev_app import OSVEV
@@ -62,20 +62,61 @@ class AudioPolicyTests(unittest.TestCase):
             self.player.setPosition.assert_not_called()
             self.assertFalse(self.audio.timer.isActive())
 
-    def test_drift_correction_is_bounded_and_does_not_seek_every_tick(self):
-        clock = PlaybackClock(self.timeline, 0, 1, 100)
-        with patch("audio_preview.time.perf_counter", return_value=100):
-            self.audio.follow(clock, 2)
-        self.player.reset_mock()
-        # Same cycle, large offset, but allow asynchronous seek/start to settle.
-        with patch("audio_preview.time.perf_counter", return_value=100.1):
-            self.audio.synchronize()
-        self.player.setPosition.assert_not_called()
-        long_timeline = PlaybackTimeline((0, 1, 2), 3, "source timestamps")
-        self.audio.clock = PlaybackClock(long_timeline, 0, 1, 100)
-        with patch("audio_preview.time.perf_counter", return_value=101):
-            self.audio.synchronize()
-        self.player.setPosition.assert_called_once_with(3000)
+    def simulate_player(self, resume_ms, seconds, stale=False, start_ms=None):
+        """Qt-like seeks: the position reports the target (or a stale earlier one) until audio
+        resumes `resume_ms` later (`start_ms` for the first start), then leads by Qt's ~110 ms
+        output buffer."""
+        now, seeks = [100000], []
+
+        def position():
+            if not seeks:
+                return 0
+            at, target = seeks[-1]
+            delay = start_ms if start_ms is not None and len(seeks) == 1 else resume_ms
+            if delay is not None and now[0] - at >= delay:
+                return target + 110 + now[0] - at - delay
+            return seeks[-2][1] if stale and len(seeks) > 1 else target
+
+        self.player.setPosition.side_effect = lambda target: seeks.append((now[0], target))
+        self.player.position.side_effect = position
+        timeline = PlaybackTimeline((0, 20, 40), 60, "source timestamps")
+        with patch("audio_preview.time.perf_counter", side_effect=lambda: now[0] / 1000):
+            self.audio.follow(PlaybackClock(timeline, 0, 1, 100), 0)
+            for _ in range(seconds * 10):
+                now[0] += 100
+                self.audio.synchronize()
+        return seeks, position() - (now[0] - 100000)
+
+    def test_resync_learns_output_latency_instead_of_reseeking_every_interval(self):
+        # A slower PC: each seek's audio starts 400 ms late, so re-seeking to the target never converged.
+        seeks, drift = self.simulate_player(resume_ms=400, seconds=10)
+        # The start, a correction that measures the latency, then one latency-aware correction.
+        self.assertEqual(len(seeks), 3, seeks)
+        self.assertLess(abs(drift), SYNC_TOLERANCE_MS)
+        timeline = PlaybackTimeline((0, 20, 40), 60, "source timestamps")
+        with patch("audio_preview.time.perf_counter", return_value=200):
+            self.audio.follow(PlaybackClock(timeline, 0, 1, 200), 50)
+            self.audio.follow(PlaybackClock(timeline, 0, 1, 200), 99.8)
+        # The learned 290 ms carries over, but never seeks past the end of the audio.
+        self.assertEqual([target for _, target in seeks[3:]], [50290, 99800])
+
+    def test_slow_first_start_is_not_learned_as_seek_latency(self):
+        # Opening the output delays only the first start; later corrections resume promptly.
+        seeks, drift = self.simulate_player(resume_ms=40, seconds=10, start_ms=500)
+        self.assertEqual(len(seeks), 2, seeks)  # The start plus one correction, no overshoot.
+        self.assertLess(abs(drift), SYNC_TOLERANCE_MS)
+
+    def test_stalled_seek_is_not_restarted_every_interval(self):
+        for stale in (False, True):
+            with self.subTest(stale=stale):
+                self.audio.pause()
+                self.audio = AudioPreview()
+                self.audio.player = self.player
+                seeks, _ = self.simulate_player(resume_ms=None, seconds=20, stale=stale)
+                gaps = [later[0] - earlier[0] for earlier, later in zip(seeks, seeks[1:])]
+                self.assertLessEqual(len(seeks), 5, seeks)
+                self.assertGreaterEqual(min(gaps), STALLED_RETRY_S * 1000)
+                self.assertEqual(gaps, sorted(gaps))
 
     def test_status_reports_actual_output_state_without_inferring_sound(self):
         statuses = []
@@ -166,8 +207,19 @@ class AudioPolicyTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unavailable"):
                 self.audio.select_track(index)
         self.audio.failed = True
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "unavailable"):
+            self.audio.select_track(1)  # Qt ignores reselecting the failed active track.
+        self.player.isSeekable.return_value = False
+        with self.assertRaisesRegex(ValueError, "unavailable"):
             self.audio.select_track(0)
+        self.assertTrue(self.audio.failed)
+        self.player.isSeekable.return_value = True
+        notices = []
+        self.audio.notice.connect(notices.append)
+        self.audio.select_track(0)
+        self.assertFalse(self.audio.failed)
+        self.assertEqual(notices, [""])
+        self.player.setActiveAudioTrack.assert_called_with(0)
 
 
 class RealAudioPlaybackTests(unittest.TestCase):
@@ -213,6 +265,14 @@ class RealAudioPlaybackTests(unittest.TestCase):
             "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=44100:duration=2",
             "-map", "0:v:0", "-map", "0:a:0", "-map", "1:a:0",
             "-c:v", "copy", "-c:a", "aac", "-t", "2", str(cls.multi_path),
+        ], capture_output=True, check=True, timeout=30)
+        # An unknown sample-entry tag leaves Qt with no decoder for the second track.
+        cls.undecodable_path = Path(cls.temp.name) / "undecodable-second-track.mov"
+        subprocess.run([
+            tool_path("ffmpeg"), "-v", "error", "-i", str(cls.paths[0]),
+            "-map", "0:v:0", "-map", "0:a:0", "-map", "0:a:0", "-c:v", "copy",
+            "-c:a:0", "copy", "-c:a:1", "pcm_s16le", "-tag:a:1", "zzzz",
+            "-strict", "unofficial", str(cls.undecodable_path),
         ], capture_output=True, check=True, timeout=30)
 
     def pump(self, seconds):
@@ -291,7 +351,7 @@ class RealAudioPlaybackTests(unittest.TestCase):
                 self.assertEqual(len(viewer.cap.audio_streams), 1)
                 self.assertTrue(stream["codec"] and stream["channels"] and stream["sample_rate"])
                 self.assertTrue(viewer.audio_status_label.text().startswith(
-                    f"1 audio stream: {stream['codec']}, {stream['channels']} ch, "
+                    f"Audio tracks: 1 | {stream['codec']}, {stream['channels']} ch, "
                     f"{stream['sample_rate']} Hz | "))
                 self.assertTrue(viewer.audio_status_label.text().endswith("Paused, muted"),
                                 viewer.audio_status_label.text())
@@ -324,7 +384,7 @@ class RealAudioPlaybackTests(unittest.TestCase):
                 viewer.pause_video()
                 viewer._load_video(str(self.silent_path))
                 self.assertTrue(viewer.audio_controls.isVisible())
-                self.assertEqual(viewer.audio_status_label.text(), "No audio streams")
+                self.assertEqual(viewer.audio_status_label.text(), "No audio tracks")
                 self.assertFalse(viewer.volume_slider.isEnabled())
                 self.assertIsNone(viewer._audio.player)
                 warning.assert_not_called()
@@ -391,12 +451,12 @@ class RealAudioPlaybackTests(unittest.TestCase):
                               or viewer.audio_track_dropdown.count() == 2)
                 self.assertFalse(viewer._audio.failed, viewer.audio_notice.text())
                 self.assertTrue(viewer.audio_track_dropdown.isVisible())
-                self.assertIn("2 audio streams", viewer.audio_status_label.text())
-                self.assertIn("2 Qt tracks", viewer.audio_status_label.text())
+                self.assertIn("Audio tracks: 2 |", viewer.audio_status_label.text())
+                self.assertNotIn("player shows", viewer.audio_status_label.text())
                 viewer._select_audio_track(1)
                 self.wait_for(lambda: viewer._audio.active_track() == 1)
                 self.assertEqual(viewer.audio_track_dropdown.currentIndex(), 1)
-                self.assertIn("Qt track 2", viewer.audio_status_label.text())
+                self.assertIn("Track 2", viewer.audio_status_label.text())
                 self.assertIn("ch ?, Hz ?", viewer.audio_status_label.text())
                 viewer.resume_video()
                 self.pump(.2)
@@ -412,8 +472,41 @@ class RealAudioPlaybackTests(unittest.TestCase):
                 self.assertFalse(viewer.audio_track_dropdown.isVisible())
                 viewer._load_video(str(self.silent_path))
                 self.assertFalse(viewer.audio_track_dropdown.isVisible())
-                self.assertEqual(viewer.audio_status_label.text(), "No audio streams")
+                self.assertEqual(viewer.audio_status_label.text(), "No audio tracks")
                 warning.assert_not_called()
+            finally:
+                viewer.close()
+                self.pump(.05)
+
+    def test_real_undecodable_track_keeps_selector_and_other_track_recovers(self):
+        with patch.object(OSVEV, "_check_dependencies"), \
+                patch.object(OSVEV, "set_windows_taskbar_icon"), \
+                patch.object(QMessageBox, "warning") as warning:
+            viewer = OSVEV()
+            viewer.show()
+            try:
+                viewer._load_video(str(self.undecodable_path))
+                viewer.mute_checkbox.setChecked(True)
+                self.wait_for(lambda: viewer._audio.failed
+                              or viewer.audio_track_dropdown.count() == 2)
+                self.assertFalse(viewer._audio.failed, viewer.audio_notice.text())
+                viewer.resume_video()
+                self.pump(.2)
+                viewer._select_audio_track(1)
+                self.wait_for(lambda: viewer._audio.failed)
+                self.assertIn("Audio unavailable", viewer.audio_notice.text())
+                self.assertIn("Unavailable", viewer.audio_status_label.text())
+                self.assertTrue(viewer.audio_track_dropdown.isVisible())
+                self.assertEqual(viewer.audio_track_dropdown.currentIndex(), 1)
+                viewer._select_audio_track(1)
+                self.assertTrue(viewer._audio.failed)
+                warning.assert_called_once()
+                viewer._select_audio_track(0)
+                self.pump(.3)
+                self.assertFalse(viewer._audio.failed, viewer.audio_notice.text())
+                self.assertEqual(viewer.audio_notice.text(), "")
+                self.assertEqual(viewer._audio.active_track(), 0)
+                self.assertIn("Playing, muted", viewer.audio_status_label.text())
             finally:
                 viewer.close()
                 self.pump(.05)

@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import QApplication, QFileDialog, QMessageBox
 from color_interpretation import ColorChoices, MissingColorMetadata
 from ffmpeg_export import ExportCancelled
 from ffmpeg_tools import resolve_arguments
+from frame_info import FrameInfoHandler
 from working_copy import (
     WorkingCopyError, WorkingCopyWorker, create_working_copy, prepare_source,
 )
@@ -118,6 +119,30 @@ class WorkingCopyTests(unittest.TestCase):
         self.assertEqual(records[0]["color"]["assumed_fields"], [])
         self.assertEqual([Fraction(r["selected_time_seconds"]) for r in records[1:]], list(source.times))
         self.assertEqual(records[0]["discrepancies"], [])
+
+    def test_right_angle_display_rotation_is_applied_and_original_is_unchanged(self):
+        for angle in (90, 180, 270):
+            with self.subTest(angle=angle):
+                rotated = Path(self.out.name) / f"rotated-{angle}.mp4"
+                ffmpeg(["-display_rotation:v:0", str(angle), "-i", self.h264,
+                        "-c:v", "copy", rotated])
+                before = hashlib.sha256(rotated.read_bytes()).hexdigest()
+                source, records = self.convert(rotated)
+                header = records[0]
+                width, height = ((48, 64) if angle in (90, 270) else (64, 48))
+                self.assertEqual(source.display_rotation, angle)
+                self.assertIn("-autorotate", header["command"])
+                self.assertEqual(
+                    header["display_transform"]["source_rotation_counterclockwise_degrees"], angle)
+                self.assertTrue(header["display_transform"]["working_copy_pixels_rotated"])
+                self.assertEqual(header["display_transform"]["output_dimensions"], [width, height])
+                self.assertEqual(header["discrepancies"][0]["kind"],
+                                 "Pure right-angle display rotation applied to working-copy pixels")
+                self.assertEqual(hashlib.sha256(rotated.read_bytes()).hexdigest(), before)
+                metadata = FrameInfoHandler.get_frame_metadata(str(self.destination))
+                self.assertEqual((metadata[0]["width"], metadata[0]["height"]), (width, height))
+                self.destination.unlink()
+                Path(str(self.destination) + ".conversion.jsonl").unlink()
 
     def test_mpeg4_requires_color_authorization_and_records_assumptions(self):
         source = prepare_source(self.mpeg4)
@@ -1182,7 +1207,8 @@ class WorkingCopyTests(unittest.TestCase):
             if dialog.source is not None:
                 timer.stop()
                 observed.extend([dialog.reorder_permission.isChecked(), dialog.create.isEnabled()])
-                self.assertIn("2 local presentation-time reversal", dialog.reorder_note.text())
+                self.assertIn("out of timestamp order", dialog.reorder_note.text())
+                self.assertIn("2 local timestamp reversal", dialog.reorder_note.toolTip())
                 dialog.reorder_permission.setChecked(True)
                 observed.append(dialog.create.isEnabled())
                 dialog.reject()

@@ -50,6 +50,7 @@ class WorkingSource:
     # is the 0-based decoder-output position of output frame i.
     order: tuple[int, ...] | None = None
     reorder_audit: dict | None = None
+    display_rotation: int = 0
 
     @property
     def reordered(self):
@@ -275,7 +276,7 @@ def prepare_source(path, cancelled=lambda: False, progress=lambda percent, text:
         raise WorkingCopyError("Working copies currently support MPEG-4 Part 2, H.264, HEVC and YUV FFV1 only.")
     if stream.get("disposition", {}).get("attached_pic"):
         raise WorkingCopyError("Attached-picture streams are not supported.")
-    FrameInfoHandler.validate_display_transforms(stream)
+    display_rotation = FrameInfoHandler.validate_display_transforms(stream)
     reject_hdr_side_data(stream.get("side_data_list", []))
     try:
         base = Fraction(stream["time_base"])
@@ -289,7 +290,9 @@ def prepare_source(path, cancelled=lambda: False, progress=lambda percent, text:
     shape = (frames[0].get("width"), frames[0].get("height"), frames[0].get("pix_fmt"))
     for index, frame in enumerate(frames):
         check_cancelled(cancelled)
-        FrameInfoHandler.validate_display_transforms(frame)
+        frame_rotation = FrameInfoHandler.validate_display_transforms(frame)
+        if frame_rotation not in (0, display_rotation):
+            raise WorkingCopyError("Source display rotation changes between frames.")
         reject_hdr_side_data(frame.get("side_data_list", []))
         width, height, pixel_format = (frame.get("width"), frame.get("height"), frame.get("pix_fmt"))
         if ((width, height, pixel_format) != shape or type(width) is not int
@@ -333,7 +336,7 @@ def prepare_source(path, cancelled=lambda: False, progress=lambda percent, text:
                    if mismatch else None)
     source = WorkingSource(str(path), before, stream, streams, frames, base,
                            tuple(times), tuple(durations), derived, tuple(sorted(missing)),
-                           declared_count, count_audit, order, reorder_audit)
+                           declared_count, count_audit, order, reorder_audit, display_rotation)
     if source.needs_rounding:
         precision_plan(source)
     if mismatch or source.reordered:
@@ -593,12 +596,13 @@ def reordering_graph(source):
 
 def conversion_command(source, output, effective):
     graph = ",".join(f"{name}={options}" for name, options in conversion_stages(effective))
+    autorotate = "-autorotate" if source.display_rotation else "-noautorotate"
     if not source.reordered:
-        video = ["-noautorotate", "-threads", "1", "-err_detect", "explode", "-copyts",
+        video = [autorotate, "-threads", "1", "-err_detect", "explode", "-copyts",
                  "-i", source.path, "-map", "0:v:0", "-an", "-sn", "-dn", "-filter_threads", "1",
                  "-vf", graph]
     else:
-        video = ["-noautorotate", "-threads", "1", "-err_detect", "explode", "-copyts",
+        video = [autorotate, "-threads", "1", "-err_detect", "explode", "-copyts",
                  "-i", source.path, "-map", "[video]", "-an", "-sn", "-dn", "-filter_threads", "1",
                  "-filter_complex", f"[0:v:0]{reordering_graph(source)},{graph}[video]"]
     raised = [millisecond(stamp) for stamp, duration in zip(source.times, source.durations)
@@ -691,6 +695,21 @@ def create_working_copy(source, destination, *, choices=None, authorize_derived=
             "command": powershell_command(published_command),
             "executed_command": powershell_command(command),
             "source_streams": source.streams,
+            "display_transform": {
+                "source_rotation_counterclockwise_degrees": source.display_rotation,
+                "working_copy_pixels_rotated": bool(source.display_rotation),
+                "output_dimensions": [
+                    source.frames[0]["height"] if source.display_rotation in (90, 270)
+                    else source.frames[0]["width"],
+                    source.frames[0]["width"] if source.display_rotation in (90, 270)
+                    else source.frames[0]["height"],
+                ],
+                "notice": (
+                    "The verified pure source display rotation was applied to working-copy pixels; "
+                    "the output display matrix was removed."
+                    if source.display_rotation else "No source display transform was applied."
+                ),
+            },
             "color": {"reported": reported_color(source.frames[0], source.stream),
                       "effective": effective, "assumed_fields": source.missing_color,
                       "provenance": {
@@ -763,6 +782,13 @@ def create_working_copy(source, destination, *, choices=None, authorize_derived=
                                 "frame (per-frame source_frame/output_frame records).",
                 "authorization": "Explicit user permission to present decoded frames in original PTS order.",
             })
+        if source.display_rotation:
+            header["discrepancies"].append({
+                "kind": "Pure right-angle display rotation applied to working-copy pixels",
+                "rotation_counterclockwise_degrees": source.display_rotation,
+                "notice": "The original decoded pixels were rotated for display; the source file was not modified.",
+                "authorization": "User selected creation of a compatible working copy.",
+            })
         _verify(source, staged, metadata, effective, command, staged_log, header, cancelled, progress)
         check_cancelled(cancelled)
         destination_paths(source, destination)
@@ -791,12 +817,18 @@ def _verify(source, staged, metadata, effective, command, staged_log, header, ca
         "-threads", "1", "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1",
     ]
     width, height = source.frames[0]["width"], source.frames[0]["height"]
+    output_width, output_height = (
+        (height, width) if source.display_rotation in (90, 270) else (width, height)
+    )
     graph = None
     with ExitStack() as stack:
         output = PyAVInputCapture(str(staged))
         stack.callback(output.release)
         if not output.read()[0]:
             raise WorkingCopyError("The completed copy has no decodable first frame.")
+        # The viewer would otherwise rotate already-rotated working-copy pixels again.
+        if output.has_display_matrix:
+            raise WorkingCopyError("The completed copy still carries a display matrix.")
         output.configure_index(metadata, cancelled=cancelled)
         PlaybackTimeline.from_metadata(metadata, len(metadata), output.get(cv2.CAP_PROP_FPS),
                                        time_base=output.native_samples.frame.time_base)
@@ -860,10 +892,18 @@ def _verify(source, staged, metadata, effective, command, staged_log, header, ca
                                  graph.add("buffersink"))
                 graph.configure()
             graph.push(frame)
-            pixels = graph.pull().to_ndarray(format="bgr24").tobytes()
-            independent = reference_process.read_exact(width * height * 3)
+            pixels = graph.pull().to_ndarray(format="bgr24")
+            if source.display_rotation == 90:
+                pixels = cv2.rotate(pixels, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            elif source.display_rotation == 180:
+                pixels = cv2.rotate(pixels, cv2.ROTATE_180)
+            elif source.display_rotation == 270:
+                pixels = cv2.rotate(pixels, cv2.ROTATE_90_CLOCKWISE)
+            pixels = pixels.tobytes()
+            independent = reference_process.read_exact(output_width * output_height * 3)
             ok, converted = output.read()
-            if not ok or converted.tobytes() != pixels or independent != pixels:
+            if (not ok or converted.shape[:2] != (output_height, output_width)
+                    or converted.tobytes() != pixels or independent != pixels):
                 raise WorkingCopyError(f"Frame {index + 1}: independent BGR pixels/order do not match.")
             native = output.native_samples.frame
             stamp = native.pts * Fraction(native.time_base)

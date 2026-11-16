@@ -184,7 +184,7 @@ class ViewerTests(unittest.TestCase):
         viewer.update_frame()
         self.assertEqual(viewer.video_time_label.text(), "Time: — / unknown")
 
-    def test_audio_line_distinguishes_container_streams_from_available_qt_tracks(self):
+    def test_audio_line_shows_both_counts_when_file_and_player_differ(self):
         viewer = self.viewer
         viewer.cap = Mock()
         viewer.cap.has_audio = True
@@ -197,9 +197,9 @@ class ViewerTests(unittest.TestCase):
                 patch.object(viewer._audio, "active_track", return_value=1), \
                 patch.object(viewer._audio, "select_track") as select:
             viewer._show_audio_status("Paused")
-            self.assertIn("3 audio streams", viewer.audio_status_label.text())
-            self.assertIn("2 Qt tracks", viewer.audio_status_label.text())
-            self.assertIn("Qt track 2: AAC", viewer.audio_status_label.text())
+            self.assertIn("Audio tracks: 3 in file | player shows 2",
+                          viewer.audio_status_label.text())
+            self.assertIn("Track 2: AAC", viewer.audio_status_label.text())
             self.assertNotIn("48000", viewer.audio_status_label.text())
             self.assertEqual(viewer.audio_track_dropdown.currentIndex(), 1)
             self.assertFalse(viewer.audio_track_dropdown.isHidden())
@@ -209,8 +209,27 @@ class ViewerTests(unittest.TestCase):
                 patch.object(viewer._audio, "active_track", return_value=-1):
             viewer._show_audio_status("Unavailable")
             self.assertTrue(viewer.audio_track_dropdown.isHidden())
-            self.assertIn("0 Qt tracks", viewer.audio_status_label.text())
+            self.assertIn("Audio tracks: 3 in file | player shows 0",
+                          viewer.audio_status_label.text())
             self.assertIn("Unavailable", viewer.audio_status_label.text())
+
+    def test_audio_line_matching_counts_do_not_claim_playability(self):
+        viewer = self.viewer
+        viewer.cap = Mock()
+        viewer.cap.has_audio = True
+        stereo = {"codec": "aac", "channels": 2, "sample_rate": 48000}
+        for streams, tracks, expected in (
+            ((stereo,), ["AAC"],
+             "Audio tracks: 1 | aac, 2 ch, 48000 Hz | Unavailable"),
+            ((stereo, stereo), ["AAC", "AAC"],
+             "Audio tracks: 2 | Track 1: AAC, ch ?, Hz ? | Unavailable"),
+        ):
+            with self.subTest(track_count=len(streams)), \
+                    patch.object(viewer._audio, "available_tracks", return_value=tracks), \
+                    patch.object(viewer._audio, "active_track", return_value=0):
+                viewer.cap.audio_streams = streams
+                viewer._show_audio_status("Unavailable")
+                self.assertEqual(viewer.audio_status_label.text(), expected)
 
     def test_main_view_enlarging_uses_exact_nearest_or_selected_interpolation(self):
         source = self.viewer.current_frame.copy()

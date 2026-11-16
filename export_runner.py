@@ -195,9 +195,12 @@ def processing_log(report: dict) -> str:
         "Processing settings:",
     ]
     lines += [f"  {key}: {value}" for key, value in report["settings"].items()]
+    display = report.get("source_display_rotation")
     lines += [
         f"Crop (pixel edges): {report['crop']}",
         f"Rotation: {report['rotation']['description']}",
+        *([f"Source display-rotation metadata: {ROTATION_LABELS[display['clockwise_degrees']]}; "
+           "not copied to the output, which is oriented only by Rotation above"] if display else []),
         f"Color decoding: matrix {report['matrix']}; range {report['source_range']}",
         f"Source chroma location (reported): {report.get('source_chroma_location')}",
         ("Export speed: not applicable (PNG has no intrinsic timing)"
@@ -278,6 +281,10 @@ def execute_export(plan: ExportPlan, metadata: list[dict], cancelled=lambda: Fal
         "source_dimensions": [plan.source_width, plan.source_height],
         "crop": {key: value for key, value in plan.settings.items() if key.startswith("crop_")},
         "rotation": rotation_report(plan.settings.get("rotation", 0)),
+        "source_display_rotation": None if plan.source_display_rotation is None else {
+            "clockwise_degrees": -plan.source_display_rotation % 360,
+            "copied_to_output": False,
+        },
         "filter_contract": "exact brightness/contrast/sharpening/crop/rotation/export scaling; verified for every selected frame",
         "processing_pipeline": PIPELINE_ID,
         "encoding": "lossless RGB PNG/FFV1" if plan.lossless else "LOSSY H.264 CRF18 YUV420 limited BT.709",

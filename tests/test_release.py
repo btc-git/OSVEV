@@ -2,6 +2,7 @@
 # Copyright © 2026 CrimLawTech LLC
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -110,8 +111,24 @@ class AboutTests(unittest.TestCase):
         self.assertEqual(tabs.tabText(0), "Disclaimers")
         text = tabs.widget(0).toPlainText()
         self.assertIn("Not a validated forensic tool", text)
+        self.assertIn(
+            "verify all findings independently.\n"
+            "Found a bug, have a feature request, or need help using the app? "
+            "View open issues or open a new issue. Issues are public. Redact sensitive "
+            "details from any information, screenshots, or logs you submit.\n", text)
+        html = tabs.widget(0).toHtml()
+        for url, label in (("https://github.com/btc-git/OSVEV/issues", "View open issues"),
+                           ("https://github.com/btc-git/OSVEV/issues/new/choose",
+                            "open a new issue")):
+            self.assertRegex(html, f'<a href="{re.escape(url)}">(?:<[^>]*>)*{label}<')
         self.assertIn("developed with AI assistance", text)
         self.assertIn("copy of original recordings", text)
+        guide_index = next(i for i in range(tabs.count()) if tabs.tabText(i) == "User guide")
+        guide = tabs.widget(guide_index).toPlainText()
+        self.assertIn("does not write to it", guide)
+        self.assertIn("wheel does not", guide)
+        self.assertIn("uncompressed-pixel estimate", guide)
+        self.assertIn("display rotation", guide)
 
 
 if __name__ == "__main__":

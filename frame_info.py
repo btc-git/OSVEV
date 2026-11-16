@@ -7,6 +7,7 @@ from fractions import Fraction
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -195,18 +196,65 @@ class FrameInfoHandler:
             return False
 
     @staticmethod
-    def validate_display_transforms(record):
-        """A display matrix can encode flips/shears even when rotation is zero."""
-        if (
-            record.get("rotation", 0) not in (0, "0")
-            or record.get("tags", {}).get("rotate", "0") not in (0, "0")
-            or any(side.get("side_data_type") == "Display Matrix"
-                   for side in record.get("side_data_list", []))
-        ):
+    def display_matrix_rotation(values):
+        """Counter-clockwise degrees for FFmpeg's row-major 3x3 display matrix.
+
+        Only exact right-angle rotations are accepted; translation is ignored.
+        """
+        values = tuple(values)
+        if len(values) != 9 or values[2] != 0 or values[5] != 0 or values[8] != 1073741824:
             raise ValueError(
-                "Unsupported source rotation/display matrix. OSVEV does not apply "
-                "display transforms; open an explicitly normalized source instead."
+                "Unsupported source display matrix; scaling, perspective and shear are not supported."
             )
+        rotation = {
+            (65536, 0, 0, 65536): 0,
+            (0, -65536, 65536, 0): 90,
+            (-65536, 0, 0, -65536): 180,
+            (0, 65536, -65536, 0): 270,
+        }.get((values[0], values[1], values[3], values[4]))
+        if rotation is None:
+            raise ValueError(
+                "Unsupported source display matrix; only exact right-angle rotations are supported."
+            )
+        return rotation
+
+    @staticmethod
+    def validate_display_transforms(record):
+        """Return a verified right-angle rotation; reject flips, shears and unknown matrices."""
+        # FFprobe names stream side data "Display Matrix" and frame side data "3x3 displaymatrix".
+        matrix_sides = [side for side in record.get("side_data_list", [])
+                        if side.get("side_data_type") in ("Display Matrix", "3x3 displaymatrix")]
+        tag_rotation = record.get("tags", {}).get("rotate", "0")
+        if tag_rotation not in (0, "0", None):
+            raise ValueError("Unsupported legacy rotation tag; a verified display matrix is required.")
+        if len(matrix_sides) > 1:
+            raise ValueError("Multiple source display matrices are not supported.")
+        side_rotation = matrix_sides[0].get("rotation") if matrix_sides else None
+        reported_rotation = side_rotation if side_rotation is not None else record.get("rotation")
+
+        if matrix_sides:
+            matrix_text = matrix_sides[0].get("displaymatrix")
+            if not isinstance(matrix_text, str) or not matrix_text:
+                raise ValueError("Unsupported source display matrix; its rotation could not be verified.")
+            values = []
+            for line in matrix_text.splitlines():
+                match = re.match(r"\s*[0-9a-fA-F]{8}:\s*(-?\d+)\s+(-?\d+)\s+(-?\d+)\s*$", line)
+                if match:
+                    values += [int(value) for value in match.groups()]
+            rotation = FrameInfoHandler.display_matrix_rotation(values)
+            if reported_rotation is not None:
+                try:
+                    angle = float(reported_rotation)
+                except (TypeError, ValueError) as error:
+                    raise ValueError("Invalid source display-matrix rotation.") from error
+                if not math.isfinite(angle) or not math.isclose(
+                        angle % 360, rotation, abs_tol=0.001):
+                    raise ValueError("Source display-matrix rotation does not match its matrix.")
+            return rotation
+
+        if reported_rotation in (None, 0, "0"):
+            return 0
+        raise ValueError("Unsupported source rotation without a verifiable display matrix.")
 
     @staticmethod
     def get_frame_metadata(video_path, cancelled=None, read_intervals=None, *,
@@ -224,8 +272,8 @@ class FrameInfoHandler:
             "frame=pict_type,pts,best_effort_timestamp_time,key_frame,width,height,"
             "pkt_size,pkt_duration_time,duration_time,pix_fmt,color_range,color_space,"
             "color_primaries,color_transfer,chroma_location,interlaced_frame:"
-            "frame_side_data=side_data_type,rotation:"
-            "stream=bit_rate:stream_side_data=side_data_type,rotation:stream_tags=rotate",
+            "frame_side_data=side_data_type,rotation,displaymatrix:"
+            "stream=bit_rate:stream_side_data=side_data_type,rotation,displaymatrix:stream_tags=rotate",
             "-of", "json", video_path,
         ]
         if progress is not None:
